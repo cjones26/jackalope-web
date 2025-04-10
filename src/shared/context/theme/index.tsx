@@ -11,11 +11,13 @@ export type ThemeProviderProps = {
 export type ThemeProviderState = {
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  colorScheme: string;
 };
 
 export const ThemeProviderContext = createContext<ThemeProviderState>({
   theme: 'system',
   setTheme: () => null,
+  colorScheme: 'light',
 });
 
 export const useTheme = () => {

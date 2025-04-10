@@ -10,7 +10,7 @@ import { useSupabase } from './shared/context/supabase';
 const router = createRouter({
   routeTree,
   context: {
-    // Iniitally undefined but set below in InnerApp
+    // Initally undefined but set below in InnerApp
     supabase: undefined!,
   },
 });

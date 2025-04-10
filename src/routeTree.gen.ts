@@ -11,37 +11,19 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
-import { Route as SignUpImport } from './routes/sign-up'
-import { Route as SignInImport } from './routes/sign-in'
-import { Route as CheckEmailImport } from './routes/check-email'
-import { Route as AboutImport } from './routes/about'
+import { Route as publicRouteImport } from './routes/(public)/route'
 import { Route as protectedRouteImport } from './routes/(protected)/route'
-import { Route as IndexImport } from './routes/index'
+import { Route as publicIndexImport } from './routes/(public)/index'
+import { Route as publicAboutImport } from './routes/(public)/about'
 import { Route as protectedSettingsImport } from './routes/(protected)/settings'
+import { Route as publicauthSignUpImport } from './routes/(public)/(auth)/sign-up'
+import { Route as publicauthSignInImport } from './routes/(public)/(auth)/sign-in'
+import { Route as publicauthCheckEmailImport } from './routes/(public)/(auth)/check-email'
 
 // Create/Update Routes
 
-const SignUpRoute = SignUpImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
-  getParentRoute: () => rootRoute,
-} as any)
-
-const SignInRoute = SignInImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => rootRoute,
-} as any)
-
-const CheckEmailRoute = CheckEmailImport.update({
-  id: '/check-email',
-  path: '/check-email',
-  getParentRoute: () => rootRoute,
-} as any)
-
-const AboutRoute = AboutImport.update({
-  id: '/about',
-  path: '/about',
+const publicRouteRoute = publicRouteImport.update({
+  id: '/(public)',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -50,10 +32,16 @@ const protectedRouteRoute = protectedRouteImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const IndexRoute = IndexImport.update({
+const publicIndexRoute = publicIndexImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => publicRouteRoute,
+} as any)
+
+const publicAboutRoute = publicAboutImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => publicRouteRoute,
 } as any)
 
 const protectedSettingsRoute = protectedSettingsImport.update({
@@ -62,17 +50,28 @@ const protectedSettingsRoute = protectedSettingsImport.update({
   getParentRoute: () => protectedRouteRoute,
 } as any)
 
+const publicauthSignUpRoute = publicauthSignUpImport.update({
+  id: '/(auth)/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => publicRouteRoute,
+} as any)
+
+const publicauthSignInRoute = publicauthSignInImport.update({
+  id: '/(auth)/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => publicRouteRoute,
+} as any)
+
+const publicauthCheckEmailRoute = publicauthCheckEmailImport.update({
+  id: '/(auth)/check-email',
+  path: '/check-email',
+  getParentRoute: () => publicRouteRoute,
+} as any)
+
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexImport
-      parentRoute: typeof rootRoute
-    }
     '/(protected)': {
       id: '/(protected)'
       path: '/'
@@ -80,32 +79,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof protectedRouteImport
       parentRoute: typeof rootRoute
     }
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutImport
-      parentRoute: typeof rootRoute
-    }
-    '/check-email': {
-      id: '/check-email'
-      path: '/check-email'
-      fullPath: '/check-email'
-      preLoaderRoute: typeof CheckEmailImport
-      parentRoute: typeof rootRoute
-    }
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInImport
-      parentRoute: typeof rootRoute
-    }
-    '/sign-up': {
-      id: '/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof SignUpImport
+    '/(public)': {
+      id: '/(public)'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof publicRouteImport
       parentRoute: typeof rootRoute
     }
     '/(protected)/settings': {
@@ -114,6 +92,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings'
       preLoaderRoute: typeof protectedSettingsImport
       parentRoute: typeof protectedRouteImport
+    }
+    '/(public)/about': {
+      id: '/(public)/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof publicAboutImport
+      parentRoute: typeof publicRouteImport
+    }
+    '/(public)/': {
+      id: '/(public)/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof publicIndexImport
+      parentRoute: typeof publicRouteImport
+    }
+    '/(public)/(auth)/check-email': {
+      id: '/(public)/(auth)/check-email'
+      path: '/check-email'
+      fullPath: '/check-email'
+      preLoaderRoute: typeof publicauthCheckEmailImport
+      parentRoute: typeof publicRouteImport
+    }
+    '/(public)/(auth)/sign-in': {
+      id: '/(public)/(auth)/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof publicauthSignInImport
+      parentRoute: typeof publicRouteImport
+    }
+    '/(public)/(auth)/sign-up': {
+      id: '/(public)/(auth)/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof publicauthSignUpImport
+      parentRoute: typeof publicRouteImport
     }
   }
 }
@@ -132,74 +145,88 @@ const protectedRouteRouteWithChildren = protectedRouteRoute._addFileChildren(
   protectedRouteRouteChildren,
 )
 
+interface publicRouteRouteChildren {
+  publicAboutRoute: typeof publicAboutRoute
+  publicIndexRoute: typeof publicIndexRoute
+  publicauthCheckEmailRoute: typeof publicauthCheckEmailRoute
+  publicauthSignInRoute: typeof publicauthSignInRoute
+  publicauthSignUpRoute: typeof publicauthSignUpRoute
+}
+
+const publicRouteRouteChildren: publicRouteRouteChildren = {
+  publicAboutRoute: publicAboutRoute,
+  publicIndexRoute: publicIndexRoute,
+  publicauthCheckEmailRoute: publicauthCheckEmailRoute,
+  publicauthSignInRoute: publicauthSignInRoute,
+  publicauthSignUpRoute: publicauthSignUpRoute,
+}
+
+const publicRouteRouteWithChildren = publicRouteRoute._addFileChildren(
+  publicRouteRouteChildren,
+)
+
 export interface FileRoutesByFullPath {
-  '/': typeof protectedRouteRouteWithChildren
-  '/about': typeof AboutRoute
-  '/check-email': typeof CheckEmailRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
+  '/': typeof publicIndexRoute
   '/settings': typeof protectedSettingsRoute
+  '/about': typeof publicAboutRoute
+  '/check-email': typeof publicauthCheckEmailRoute
+  '/sign-in': typeof publicauthSignInRoute
+  '/sign-up': typeof publicauthSignUpRoute
 }
 
 export interface FileRoutesByTo {
-  '/': typeof protectedRouteRouteWithChildren
-  '/about': typeof AboutRoute
-  '/check-email': typeof CheckEmailRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
+  '/': typeof publicIndexRoute
   '/settings': typeof protectedSettingsRoute
+  '/about': typeof publicAboutRoute
+  '/check-email': typeof publicauthCheckEmailRoute
+  '/sign-in': typeof publicauthSignInRoute
+  '/sign-up': typeof publicauthSignUpRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
-  '/': typeof IndexRoute
   '/(protected)': typeof protectedRouteRouteWithChildren
-  '/about': typeof AboutRoute
-  '/check-email': typeof CheckEmailRoute
-  '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
+  '/(public)': typeof publicRouteRouteWithChildren
   '/(protected)/settings': typeof protectedSettingsRoute
+  '/(public)/about': typeof publicAboutRoute
+  '/(public)/': typeof publicIndexRoute
+  '/(public)/(auth)/check-email': typeof publicauthCheckEmailRoute
+  '/(public)/(auth)/sign-in': typeof publicauthSignInRoute
+  '/(public)/(auth)/sign-up': typeof publicauthSignUpRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/settings'
     | '/about'
     | '/check-email'
     | '/sign-in'
     | '/sign-up'
-    | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/check-email' | '/sign-in' | '/sign-up' | '/settings'
+  to: '/' | '/settings' | '/about' | '/check-email' | '/sign-in' | '/sign-up'
   id:
     | '__root__'
-    | '/'
     | '/(protected)'
-    | '/about'
-    | '/check-email'
-    | '/sign-in'
-    | '/sign-up'
+    | '/(public)'
     | '/(protected)/settings'
+    | '/(public)/about'
+    | '/(public)/'
+    | '/(public)/(auth)/check-email'
+    | '/(public)/(auth)/sign-in'
+    | '/(public)/(auth)/sign-up'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
   protectedRouteRoute: typeof protectedRouteRouteWithChildren
-  AboutRoute: typeof AboutRoute
-  CheckEmailRoute: typeof CheckEmailRoute
-  SignInRoute: typeof SignInRoute
-  SignUpRoute: typeof SignUpRoute
+  publicRouteRoute: typeof publicRouteRouteWithChildren
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
   protectedRouteRoute: protectedRouteRouteWithChildren,
-  AboutRoute: AboutRoute,
-  CheckEmailRoute: CheckEmailRoute,
-  SignInRoute: SignInRoute,
-  SignUpRoute: SignUpRoute,
+  publicRouteRoute: publicRouteRouteWithChildren,
 }
 
 export const routeTree = rootRoute
@@ -212,16 +239,9 @@ export const routeTree = rootRoute
     "__root__": {
       "filePath": "__root.tsx",
       "children": [
-        "/",
         "/(protected)",
-        "/about",
-        "/check-email",
-        "/sign-in",
-        "/sign-up"
+        "/(public)"
       ]
-    },
-    "/": {
-      "filePath": "index.tsx"
     },
     "/(protected)": {
       "filePath": "(protected)/route.tsx",
@@ -229,21 +249,39 @@ export const routeTree = rootRoute
         "/(protected)/settings"
       ]
     },
-    "/about": {
-      "filePath": "about.tsx"
-    },
-    "/check-email": {
-      "filePath": "check-email.tsx"
-    },
-    "/sign-in": {
-      "filePath": "sign-in.tsx"
-    },
-    "/sign-up": {
-      "filePath": "sign-up.tsx"
+    "/(public)": {
+      "filePath": "(public)/route.tsx",
+      "children": [
+        "/(public)/about",
+        "/(public)/",
+        "/(public)/(auth)/check-email",
+        "/(public)/(auth)/sign-in",
+        "/(public)/(auth)/sign-up"
+      ]
     },
     "/(protected)/settings": {
       "filePath": "(protected)/settings.tsx",
       "parent": "/(protected)"
+    },
+    "/(public)/about": {
+      "filePath": "(public)/about.tsx",
+      "parent": "/(public)"
+    },
+    "/(public)/": {
+      "filePath": "(public)/index.tsx",
+      "parent": "/(public)"
+    },
+    "/(public)/(auth)/check-email": {
+      "filePath": "(public)/(auth)/check-email.tsx",
+      "parent": "/(public)"
+    },
+    "/(public)/(auth)/sign-in": {
+      "filePath": "(public)/(auth)/sign-in.tsx",
+      "parent": "/(public)"
+    },
+    "/(public)/(auth)/sign-up": {
+      "filePath": "(public)/(auth)/sign-up.tsx",
+      "parent": "/(public)"
     }
   }
 }

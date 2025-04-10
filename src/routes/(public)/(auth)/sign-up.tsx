@@ -1,6 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { createFileRoute } from '@tanstack/react-router';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -10,50 +9,66 @@ import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput } from '@/shared/ui/Form/Form';
 import { H1 } from '@/shared/ui/typography';
 
-export const Route = createFileRoute('/sign-in')({
+export const Route = createFileRoute('/(public)/(auth)/sign-up')({
   component: RouteComponent,
 });
 
-const signupSchema = z.object({
-  email: z.string().email('Please enter a valid email address.'),
-  password: z
-    .string()
-    .min(8, 'Please enter at least 8 characters.')
-    .max(64, 'Please enter fewer than 64 characters.'),
-});
+const signUpSchema = z
+  .object({
+    email: z.string().email('Please enter a valid email address.'),
+    password: z
+      .string()
+      .min(8, 'Please enter at least 8 characters.')
+      .max(64, 'Please enter fewer than 64 characters.')
+      .regex(
+        /^(?=.*[a-z])/,
+        'Your password must have at least one lowercase letter.'
+      )
+      .regex(
+        /^(?=.*[A-Z])/,
+        'Your password must have at least one uppercase letter.'
+      )
+      .regex(/^(?=.*[0-9])/, 'Your password must have at least one number.')
+      .regex(
+        /^(?=.*[!@#$%^&*])/,
+        'Your password must have at least one special character.'
+      ),
+    confirmPassword: z.string().min(8, 'Please enter at least 8 characters.'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Your passwords do not match.',
+    path: ['confirmPassword'],
+  });
 
 function RouteComponent() {
-  const [isLoginError, setIsLoginError] = useState(false);
-  const { signInWithPassword } = useSupabase();
+  const { signUp } = useSupabase();
 
-  const form = useForm<z.infer<typeof signupSchema>>({
-    resolver: zodResolver(signupSchema),
+  const form = useForm<z.infer<typeof signUpSchema>>({
+    resolver: zodResolver(signUpSchema),
     defaultValues: {
       email: '',
       password: '',
+      confirmPassword: '',
     },
   });
 
-  async function onSubmit(data: z.infer<typeof signupSchema>) {
+  async function onSubmit(data: z.infer<typeof signUpSchema>) {
     try {
-      console.log('Signing in with: ', data.email, data.password);
-      await signInWithPassword(data.email, data.password);
+      await signUp(data.email, data.password);
 
       form.reset();
-    } catch (error: Error | unknown) {
-      setIsLoginError(true);
-      console.log('Error signing in: ', error);
+    } catch (error) {
+      console.log(error);
     }
   }
 
   return (
     <div className="flex flex-col flex-1 bg-background p-4">
       <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
-        <H1>Sign in</H1>
+        <H1>Sign Up</H1>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            onChange={() => setIsLoginError(false)}
             className="flex flex-col gap-4"
           >
             <FormField
@@ -85,25 +100,33 @@ function RouteComponent() {
                 />
               )}
             />
-            {isLoginError ? (
-              <p className="font-medium text-destructive w-80 break-words text-center text-sm">
-                Incorrect email or password. Try again or
-                <Link className="underline" to="/sign-up">
-                  {' '}
-                  create an account
-                </Link>
-                .
-              </p>
-            ) : null}
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormInput
+                  type="password"
+                  placeholder="Confirm Password"
+                  autoCapitalize="none"
+                  autoCorrect="false"
+                  className="form-input w-80"
+                  {...field}
+                />
+              )}
+            />
             <Button
               type="submit"
+              className={`btn btn-default ${
+                form.formState.isSubmitting
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              }`}
               disabled={form.formState.isSubmitting}
-              className="btn-default"
             >
               {form.formState.isSubmitting ? (
                 <span>Loading...</span>
               ) : (
-                <span>Sign in</span>
+                <span>Sign up</span>
               )}
             </Button>
           </form>

@@ -5,8 +5,6 @@ export const Route = createFileRoute('/(protected)')({
     if (!context.supabase.session) {
       throw redirect({ to: '/' });
     }
-
-    // return true;
   },
   component: RouteComponent,
 });

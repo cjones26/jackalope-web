@@ -9,7 +9,7 @@ interface JackalopeRouterContext {
 
 export const Route = createRootRouteWithContext<JackalopeRouterContext>()({
   component: () => (
-    <div className="flex h-full">
+    <div className="flex flex-col h-full">
       <Outlet />
       <TanStackRouterDevtools />
     </div>
