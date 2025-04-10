@@ -1,22 +1,35 @@
 import type { Session, User } from '@supabase/supabase-js';
+import { Router } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
-import { supabase } from '@/config/supabase';
-import { SupabaseContext, SupabaseProviderProps } from '@/context/supabase';
+import { routeTree } from '@/routeTree.gen';
+import {
+  SupabaseContext,
+  SupabaseProviderProps,
+} from '@/shared/context/supabase';
+import { supabase } from '@/shared/services/supabase';
 
-export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
-  // const navigate = useNavigate();
+export const SupabaseProvider = ({
+  children,
+  router,
+}: SupabaseProviderProps & { router: Router<typeof routeTree> }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [initialized, setInitialized] = useState<boolean>(false);
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { error, data } = await supabase.auth.signUp({
       email,
       password,
     });
+
+    console.log('signupData: ', data);
+    console.log('signupError: ', error);
+
     if (error) {
       throw error;
+    } else {
+      router.navigate({ to: '/check-email' });
     }
   };
 
@@ -25,16 +38,22 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
       email,
       password,
     });
+
     if (error) {
       throw error;
     }
+
+    router.navigate({ to: '/settings' });
   };
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
+
     if (error) {
       throw error;
     }
+
+    router.navigate({ to: '/' });
   };
 
   useEffect(() => {
@@ -58,17 +77,6 @@ export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
 
     initialize();
   }, []);
-
-  useEffect(() => {
-    if (!initialized) return;
-
-    if (session) {
-      // navigate('/protected');
-      console.log('User is logged in:', user);
-    } else {
-      console.log('No active session, redirecting to login');
-    }
-  }, [initialized, session, user]);
 
   if (!initialized) {
     return <div>Loading...</div>;

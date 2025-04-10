@@ -1,33 +1,39 @@
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { createClient, Session } from '@supabase/supabase-js';
-import { useEffect, useState } from 'react';
+import { createRouter, RouterProvider } from '@tanstack/react-router';
 
-const supabase = createClient(
-  import.meta.env.VITE_PUBLIC_AUTH_API_URL,
-  import.meta.env.VITE_PUBLIC_AUTH_API_KEY
-);
+import { SupabaseProvider } from '@/shared/context/supabase/SupabaseProvider';
+import { ThemeProvider } from '@/shared/context/theme/ThemeProvider';
+
+import { routeTree } from './routeTree.gen';
+import { useSupabase } from './shared/context/supabase';
+
+// Create a new router instance
+const router = createRouter({
+  routeTree,
+  context: {
+    // Iniitally undefined but set below in InnerApp
+    supabase: undefined!,
+  },
+});
+
+// Register the router instance for type safety
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router;
+  }
+}
+
+function InnerApp() {
+  const supabase = useSupabase();
+
+  return <RouterProvider router={router} context={{ supabase }} />;
+}
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (!session) {
-    return <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} />;
-  } else {
-    return <div>Logged in!</div>;
-  }
+  return (
+    <SupabaseProvider router={router}>
+      <ThemeProvider storageKey="jackalope-theme">
+        <InnerApp />
+      </ThemeProvider>
+    </SupabaseProvider>
+  );
 }

@@ -11,10 +11,33 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
+import { Route as SignUpImport } from './routes/sign-up'
+import { Route as SignInImport } from './routes/sign-in'
+import { Route as CheckEmailImport } from './routes/check-email'
 import { Route as AboutImport } from './routes/about'
+import { Route as protectedRouteImport } from './routes/(protected)/route'
 import { Route as IndexImport } from './routes/index'
+import { Route as protectedSettingsImport } from './routes/(protected)/settings'
 
 // Create/Update Routes
+
+const SignUpRoute = SignUpImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const SignInRoute = SignInImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const CheckEmailRoute = CheckEmailImport.update({
+  id: '/check-email',
+  path: '/check-email',
+  getParentRoute: () => rootRoute,
+} as any)
 
 const AboutRoute = AboutImport.update({
   id: '/about',
@@ -22,10 +45,21 @@ const AboutRoute = AboutImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
+const protectedRouteRoute = protectedRouteImport.update({
+  id: '/(protected)',
+  getParentRoute: () => rootRoute,
+} as any)
+
 const IndexRoute = IndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRoute,
+} as any)
+
+const protectedSettingsRoute = protectedSettingsImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => protectedRouteRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
@@ -39,6 +73,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexImport
       parentRoute: typeof rootRoute
     }
+    '/(protected)': {
+      id: '/(protected)'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof protectedRouteImport
+      parentRoute: typeof rootRoute
+    }
     '/about': {
       id: '/about'
       path: '/about'
@@ -46,44 +87,119 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutImport
       parentRoute: typeof rootRoute
     }
+    '/check-email': {
+      id: '/check-email'
+      path: '/check-email'
+      fullPath: '/check-email'
+      preLoaderRoute: typeof CheckEmailImport
+      parentRoute: typeof rootRoute
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInImport
+      parentRoute: typeof rootRoute
+    }
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpImport
+      parentRoute: typeof rootRoute
+    }
+    '/(protected)/settings': {
+      id: '/(protected)/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof protectedSettingsImport
+      parentRoute: typeof protectedRouteImport
+    }
   }
 }
 
 // Create and export the route tree
 
+interface protectedRouteRouteChildren {
+  protectedSettingsRoute: typeof protectedSettingsRoute
+}
+
+const protectedRouteRouteChildren: protectedRouteRouteChildren = {
+  protectedSettingsRoute: protectedSettingsRoute,
+}
+
+const protectedRouteRouteWithChildren = protectedRouteRoute._addFileChildren(
+  protectedRouteRouteChildren,
+)
+
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof protectedRouteRouteWithChildren
   '/about': typeof AboutRoute
+  '/check-email': typeof CheckEmailRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
+  '/settings': typeof protectedSettingsRoute
 }
 
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/': typeof protectedRouteRouteWithChildren
   '/about': typeof AboutRoute
+  '/check-email': typeof CheckEmailRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
+  '/settings': typeof protectedSettingsRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
   '/': typeof IndexRoute
+  '/(protected)': typeof protectedRouteRouteWithChildren
   '/about': typeof AboutRoute
+  '/check-email': typeof CheckEmailRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
+  '/(protected)/settings': typeof protectedSettingsRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/check-email'
+    | '/sign-in'
+    | '/sign-up'
+    | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about'
-  id: '__root__' | '/' | '/about'
+  to: '/' | '/about' | '/check-email' | '/sign-in' | '/sign-up' | '/settings'
+  id:
+    | '__root__'
+    | '/'
+    | '/(protected)'
+    | '/about'
+    | '/check-email'
+    | '/sign-in'
+    | '/sign-up'
+    | '/(protected)/settings'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  protectedRouteRoute: typeof protectedRouteRouteWithChildren
   AboutRoute: typeof AboutRoute
+  CheckEmailRoute: typeof CheckEmailRoute
+  SignInRoute: typeof SignInRoute
+  SignUpRoute: typeof SignUpRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  protectedRouteRoute: protectedRouteRouteWithChildren,
   AboutRoute: AboutRoute,
+  CheckEmailRoute: CheckEmailRoute,
+  SignInRoute: SignInRoute,
+  SignUpRoute: SignUpRoute,
 }
 
 export const routeTree = rootRoute
@@ -97,14 +213,37 @@ export const routeTree = rootRoute
       "filePath": "__root.tsx",
       "children": [
         "/",
-        "/about"
+        "/(protected)",
+        "/about",
+        "/check-email",
+        "/sign-in",
+        "/sign-up"
       ]
     },
     "/": {
       "filePath": "index.tsx"
     },
+    "/(protected)": {
+      "filePath": "(protected)/route.tsx",
+      "children": [
+        "/(protected)/settings"
+      ]
+    },
     "/about": {
       "filePath": "about.tsx"
+    },
+    "/check-email": {
+      "filePath": "check-email.tsx"
+    },
+    "/sign-in": {
+      "filePath": "sign-in.tsx"
+    },
+    "/sign-up": {
+      "filePath": "sign-up.tsx"
+    },
+    "/(protected)/settings": {
+      "filePath": "(protected)/settings.tsx",
+      "parent": "/(protected)"
     }
   }
 }

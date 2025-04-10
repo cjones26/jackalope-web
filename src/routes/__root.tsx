@@ -1,7 +1,13 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router';
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 
-export const Route = createRootRoute({
+import { SupabaseContextProps } from '@/shared/context/supabase';
+
+interface JackalopeRouterContext {
+  supabase: SupabaseContextProps;
+}
+
+export const Route = createRootRouteWithContext<JackalopeRouterContext>()({
   component: () => (
     <div className="flex h-full">
       <Outlet />
