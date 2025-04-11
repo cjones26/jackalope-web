@@ -36,7 +36,6 @@ function RouteComponent() {
 
   async function onSubmit(data: z.infer<typeof signupSchema>) {
     try {
-      console.log('Signing in with: ', data.email, data.password);
       await signInWithPassword(data.email, data.password);
 
       form.reset();
