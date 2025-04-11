@@ -17,11 +17,14 @@ function RouteComponent() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetchWithAuth('http://localhost:8080/profile', {
-          method: 'GET',
-        });
+        const response = await fetchWithAuth(
+          `${import.meta.env.VITE_API_URL}/profile`,
+          {
+            method: 'GET',
+          }
+        );
 
-        console.log('response: ', response);
+        console.log('Response: ', response);
       } catch (error) {
         if ((error as ApiError).status === 404) {
           console.error('Profile does not exist!');
