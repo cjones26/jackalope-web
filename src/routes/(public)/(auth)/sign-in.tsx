@@ -65,7 +65,7 @@ function RouteComponent() {
                   autoCapitalize="none"
                   autoComplete="email"
                   autoCorrect="false"
-                  className="form-input w-80"
+                  className="form-input w-full lg:w-80"
                   {...field}
                 />
               )}
@@ -79,7 +79,7 @@ function RouteComponent() {
                   placeholder="Password"
                   autoCapitalize="none"
                   autoCorrect="false"
-                  className="form-input w-80"
+                  className="form-input w-full lg:w-80"
                   {...field}
                 />
               )}

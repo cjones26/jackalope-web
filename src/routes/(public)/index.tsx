@@ -28,10 +28,14 @@ function Index() {
         </P>
       </div>
       <div className="flex flex-col gap-y-4 m-4 items-center">
-        <Button className="w-96 py-2 px-4" asChild>
+        <Button className="w-full lg:w-80 py-2 px-4" asChild>
           <Link to="/sign-up">Sign up</Link>
         </Button>
-        <Button className="w-96 py-2 px-4" variant={'secondary'} asChild>
+        <Button
+          className="w-full lg:w-80 py-2 px-4"
+          variant={'secondary'}
+          asChild
+        >
           <Link to="/sign-in">Sign in</Link>
         </Button>
       </div>

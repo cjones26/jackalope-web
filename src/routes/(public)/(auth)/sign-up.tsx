@@ -116,7 +116,7 @@ function RouteComponent() {
             />
             <Button
               type="submit"
-              className={`btn btn-default ${
+              className={`btn btn-default w-full lg:w-80 ${
                 form.formState.isSubmitting
                   ? 'opacity-50 cursor-not-allowed'
                   : ''

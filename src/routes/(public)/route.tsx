@@ -13,7 +13,7 @@ function RouteComponent() {
 
   return (
     <>
-      <header>
+      <header className="hidden md:block">
         <Link
           to="/"
           className="flex items-center p-4 bg-background text-foreground"
