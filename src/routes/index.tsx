@@ -6,7 +6,7 @@ import { useTheme } from '@/shared/context/theme';
 import { Button } from '@/shared/ui/Button';
 import { H1, P } from '@/shared/ui/typography';
 
-export const Route = createFileRoute('/(public)/')({
+export const Route = createFileRoute('/')({
   component: Index,
 });
 
