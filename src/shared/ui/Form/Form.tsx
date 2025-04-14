@@ -116,6 +116,7 @@ function FormMessage({ className, ...props }: React.ComponentProps<'p'>) {
 function FormInput({
   label,
   description,
+  className,
   onChange,
   ...props
 }: {
@@ -138,7 +139,7 @@ function FormInput({
   }
 
   return (
-    <FormItem>
+    <FormItem className={className}>
       {!!label && (
         <FormLabel id={formItemId} onClick={handleOnLabelPress}>
           {label}

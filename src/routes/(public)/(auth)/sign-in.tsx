@@ -46,72 +46,68 @@ function RouteComponent() {
   }
 
   return (
-    <div className="flex flex-col flex-1 bg-background p-4">
-      <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
-        <H1>Sign in</H1>
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            onChange={() => setIsLoginError(false)}
-            className="flex flex-col gap-4"
+    <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
+      <H1>Sign in</H1>
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          onChange={() => setIsLoginError(false)}
+          className="flex flex-col items-center gap-4 w-full md:w-80"
+        >
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormInput
+                type="email"
+                placeholder="Email"
+                autoCapitalize="none"
+                autoComplete="email"
+                autoCorrect="false"
+                className="w-full"
+                {...field}
+              />
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormInput
+                type="password"
+                placeholder="Password"
+                autoCapitalize="none"
+                autoCorrect="false"
+                className="w-full"
+                {...field}
+              />
+            )}
+          />
+          {isLoginError ? (
+            <p className="font-medium text-destructive w-80 break-words text-center text-sm">
+              Incorrect email or password. Try again or
+              <Link className="underline" to="/sign-up">
+                {' '}
+                create an account
+              </Link>
+              .
+            </p>
+          ) : null}
+          <Button
+            type="submit"
+            className={`btn btn-default w-full ${
+              form.formState.isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            disabled={form.formState.isSubmitting}
           >
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormInput
-                  type="email"
-                  placeholder="Email"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  autoCorrect="false"
-                  className="form-input w-full lg:w-80"
-                  {...field}
-                />
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormInput
-                  type="password"
-                  placeholder="Password"
-                  autoCapitalize="none"
-                  autoCorrect="false"
-                  className="form-input w-full lg:w-80"
-                  {...field}
-                />
-              )}
-            />
-            {isLoginError ? (
-              <p className="font-medium text-destructive w-80 break-words text-center text-sm">
-                Incorrect email or password. Try again or
-                <Link className="underline" to="/sign-up">
-                  {' '}
-                  create an account
-                </Link>
-                .
-              </p>
-            ) : null}
-            <Button
-              type="submit"
-              className={`btn btn-default ${
-                form.formState.isSubmitting
-                  ? 'opacity-50 cursor-not-allowed'
-                  : ''
-              }`}
-              disabled={form.formState.isSubmitting}
-            >
-              {form.formState.isSubmitting ? (
-                <span>Loading...</span>
-              ) : (
-                <span>Sign in</span>
-              )}
-            </Button>
-          </form>
-        </Form>
-      </div>
+            {form.formState.isSubmitting ? (
+              <span>Loading...</span>
+            ) : (
+              <span>Sign in</span>
+            )}
+          </Button>
+        </form>
+      </Form>
     </div>
   );
 }
