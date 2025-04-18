@@ -55,8 +55,6 @@ function RouteComponent() {
   async function onSubmit(data: z.infer<typeof signUpSchema>) {
     try {
       await signUp(data.email, data.password);
-
-      form.reset();
     } catch (error) {
       console.log(error);
     }

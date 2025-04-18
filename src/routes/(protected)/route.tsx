@@ -23,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/ui/DropdownMenu';
+import useSignOut from '@/shared/hooks/useSignOut';
 
 export const Route = createFileRoute('/(protected)')({
   beforeLoad: ({ context }) => {
@@ -36,7 +37,7 @@ export const Route = createFileRoute('/(protected)')({
 function RouteComponent() {
   const { colorScheme } = useTheme();
   const { fetchWithAuth } = useApi();
-  const { signOut } = useSupabase();
+  const signOut = useSignOut();
 
   // Fetch user profile data
   const { data: profile } = useQuery({
@@ -52,8 +53,8 @@ function RouteComponent() {
     return null;
   };
 
-  const handleSignOut = async () => {
-    await signOut();
+  const handleSignOut = () => {
+    signOut();
   };
 
   return (
