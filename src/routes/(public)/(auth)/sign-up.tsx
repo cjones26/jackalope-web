@@ -8,6 +8,7 @@ import { Button } from '@/shared/ui/Button';
 import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput } from '@/shared/ui/Form/Form';
 import { H1 } from '@/shared/ui/typography';
+import { Spinner } from '@/shared/ui/Spinner';
 
 export const Route = createFileRoute('/(public)/(auth)/sign-up')({
   component: RouteComponent,
@@ -119,7 +120,9 @@ function RouteComponent() {
             disabled={form.formState.isSubmitting}
           >
             {form.formState.isSubmitting ? (
-              <span>Loading...</span>
+              <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
+                <Spinner>Loading...</Spinner>
+              </div>
             ) : (
               <span>Sign up</span>
             )}

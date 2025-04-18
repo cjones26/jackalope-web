@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 
 import { ProfileForm } from '@/features/profile/ProfileForm';
-import { useApi } from '@/shared/hooks/useApi';
+import { Profile } from '@/shared/context/api/types/Profile';
+import { ApiError, useApi } from '@/shared/hooks/useApi';
+import { Spinner } from '@/shared/ui/Spinner';
 import { H3 } from '@/shared/ui/typography';
 
 export const Route = createFileRoute('/(protected)/profile')({
@@ -12,7 +14,7 @@ export const Route = createFileRoute('/(protected)/profile')({
 function RouteComponent() {
   const { fetchWithAuth } = useApi();
 
-  const { isPending, isError, data, error } = useQuery({
+  const { isPending, isError, data, error } = useQuery<Profile, ApiError>({
     queryKey: ['profile'],
     queryFn: () => fetchWithAuth('/profile'),
   });
@@ -20,15 +22,15 @@ function RouteComponent() {
   if (isPending) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
-        <span>Loading...</span>
+        <Spinner>Loading...</Spinner>
       </div>
     );
   }
 
-  if (isError) {
+  if (isError && error?.status !== 404) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
-        <span>Error: {error.message}</span>
+        <span>There was an error fetching your profile.</span>
       </div>
     );
   }

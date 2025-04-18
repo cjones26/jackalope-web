@@ -8,6 +8,7 @@ import {
   SupabaseProviderProps,
 } from '@/shared/context/supabase';
 import { supabase } from '@/shared/services/supabase';
+import { Spinner } from '@/shared/ui/Spinner';
 
 export const SupabaseProvider = ({
   children,
@@ -79,7 +80,11 @@ export const SupabaseProvider = ({
   }, []);
 
   if (!initialized) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center w-screen h-screen">
+        <Spinner>Loading...</Spinner>
+      </div>
+    );
   }
 
   return (

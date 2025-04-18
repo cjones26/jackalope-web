@@ -1,7 +1,8 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, Navigate } from '@tanstack/react-router';
 
 import Icon from '@/assets/icon.png';
 import IconDark from '@/assets/icon-dark.png';
+import { useSupabase } from '@/shared/context/supabase';
 import { useTheme } from '@/shared/context/theme';
 import { Button } from '@/shared/ui/Button';
 import { H1, P } from '@/shared/ui/typography';
@@ -12,6 +13,11 @@ export const Route = createFileRoute('/')({
 
 function Index() {
   const { colorScheme } = useTheme();
+  const { session } = useSupabase();
+
+  if (session) {
+    return <Navigate to="/profile" />;
+  }
 
   return (
     <div className="flex flex-1 flex-col bg-background p-4">

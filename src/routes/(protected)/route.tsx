@@ -52,8 +52,8 @@ function RouteComponent() {
     return null;
   };
 
-  const handleSignOut = () => {
-    signOut();
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   return (

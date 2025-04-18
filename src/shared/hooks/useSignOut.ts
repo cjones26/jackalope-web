@@ -6,8 +6,8 @@ export default function useSignOut() {
   const { signOut } = useSupabase();
   const queryClient = useQueryClient();
 
-  return () => {
-    signOut();
+  return async () => {
+    await signOut();
     queryClient.clear();
   };
 }
