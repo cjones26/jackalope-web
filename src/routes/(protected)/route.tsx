@@ -11,9 +11,9 @@ import DefaultAvatar from '@/assets/default-avatar.jpg';
 import Icon from '@/assets/icon.png';
 import IconDark from '@/assets/icon-dark.png';
 import Footer from '@/shared/components/Footer';
-import { useSupabase } from '@/shared/context/supabase';
 import { useTheme } from '@/shared/context/theme';
 import { useApi } from '@/shared/hooks/useApi';
+import useSignOut from '@/shared/hooks/useSignOut';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/Avatar';
 import { Button } from '@/shared/ui/Button';
 import {
@@ -23,7 +23,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/ui/DropdownMenu';
-import useSignOut from '@/shared/hooks/useSignOut';
 
 export const Route = createFileRoute('/(protected)')({
   beforeLoad: ({ context }) => {
