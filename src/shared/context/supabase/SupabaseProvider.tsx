@@ -43,7 +43,7 @@ export const SupabaseProvider = ({
       throw error;
     }
 
-    router.navigate({ to: '/settings' });
+    router.navigate({ to: '/profile' });
   };
 
   const signOut = async () => {

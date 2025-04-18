@@ -1,10 +1,11 @@
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 
+import { ApiProvider } from '@/shared/context/api/ApiProvider';
+import { useSupabase } from '@/shared/context/supabase';
 import { SupabaseProvider } from '@/shared/context/supabase/SupabaseProvider';
 import { ThemeProvider } from '@/shared/context/theme/ThemeProvider';
 
 import { routeTree } from './routeTree.gen';
-import { useSupabase } from './shared/context/supabase';
 
 // Create a new router instance
 const router = createRouter({
@@ -31,9 +32,11 @@ function InnerApp() {
 export default function App() {
   return (
     <SupabaseProvider router={router}>
-      <ThemeProvider storageKey="jackalope-theme">
-        <InnerApp />
-      </ThemeProvider>
+      <ApiProvider>
+        <ThemeProvider storageKey="jackalope-theme">
+          <InnerApp />
+        </ThemeProvider>
+      </ApiProvider>
     </SupabaseProvider>
   );
 }

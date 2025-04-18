@@ -1,3 +1,4 @@
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 
@@ -11,7 +12,12 @@ export const Route = createRootRouteWithContext<JackalopeRouterContext>()({
   component: () => (
     <div className="flex flex-col h-dvh">
       <Outlet />
-      <TanStackRouterDevtools />
+      {import.meta.env.MODE !== 'production' && (
+        <>
+          <ReactQueryDevtools />
+          <TanStackRouterDevtools />
+        </>
+      )}
     </div>
   ),
 });
