@@ -10,7 +10,7 @@ interface JackalopeRouterContext {
 
 export const Route = createRootRouteWithContext<JackalopeRouterContext>()({
   component: () => (
-    <div className="flex flex-col h-dvh">
+    <div className="flex flex-col h-dvh bg-background text-foreground">
       <Outlet />
       {import.meta.env.MODE !== 'production' && (
         <>
