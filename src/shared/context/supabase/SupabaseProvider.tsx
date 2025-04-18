@@ -45,35 +45,23 @@ export const SupabaseProvider = ({
   };
 
   const signOut = async () => {
-    try {
-      // First attempt to sign out through Supabase
-      const { error } = await supabase.auth.signOut();
+    // First attempt to sign out through Supabase
+    const { error } = await supabase.auth.signOut();
 
-      if (error) {
-        throw error;
-      }
-    } catch (err) {
-      // If it's an AuthSessionMissingError, we can just redirect anyway
-      if (
-        err instanceof Error &&
-        err.message?.includes('Auth session missing')
-      ) {
-        console.log('No active session found, redirecting anyway');
-      } else {
-        console.error('Unexpected error during sign out:', err);
-      }
-    } finally {
-      const supabaseKeys = Object.keys(localStorage).filter((key) =>
-        key.startsWith('sb-')
-      );
-
-      supabaseKeys.forEach((key) => {
-        localStorage.removeItem(key);
-      });
-
-      // Then navigate home
-      router.navigate({ to: '/' });
+    if (error) {
+      throw error;
     }
+
+    const supabaseKeys = Object.keys(localStorage).filter((key) =>
+      key.startsWith('sb-')
+    );
+
+    supabaseKeys.forEach((key) => {
+      localStorage.removeItem(key);
+    });
+
+    // Then navigate home
+    router.navigate({ to: '/' });
   };
 
   useEffect(() => {
