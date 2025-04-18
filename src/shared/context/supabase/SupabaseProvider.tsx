@@ -45,23 +45,27 @@ export const SupabaseProvider = ({
   };
 
   const signOut = async () => {
-    // First attempt to sign out through Supabase
-    const { error } = await supabase.auth.signOut();
+    try {
+      // First attempt to sign out through Supabase
+      const { error } = await supabase.auth.signOut();
 
-    if (error) {
-      throw error;
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error signing out:', error);
+    } finally {
+      const supabaseKeys = Object.keys(localStorage).filter((key) =>
+        key.startsWith('sb-')
+      );
+
+      supabaseKeys.forEach((key) => {
+        localStorage.removeItem(key);
+      });
+
+      // Then navigate home
+      router.navigate({ to: '/' });
     }
-
-    const supabaseKeys = Object.keys(localStorage).filter((key) =>
-      key.startsWith('sb-')
-    );
-
-    supabaseKeys.forEach((key) => {
-      localStorage.removeItem(key);
-    });
-
-    // Then navigate home
-    router.navigate({ to: '/' });
   };
 
   useEffect(() => {
