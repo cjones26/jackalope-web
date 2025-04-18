@@ -1,5 +1,3 @@
-import { Link } from '@tanstack/react-router';
-
 const Footer = () => {
   return (
     <footer className="border-t border-border px-6 py-4 mt-auto">
@@ -8,15 +6,6 @@ const Footer = () => {
           © {new Date().getFullYear()} Valence Software. All rights reserved.
         </div>
         <div className="flex space-x-6">
-          <Link to="/terms" className="hover:text-foreground transition-colors">
-            Terms
-          </Link>
-          <Link
-            to="/privacy"
-            className="hover:text-foreground transition-colors"
-          >
-            Privacy
-          </Link>
           <a
             href="mailto:contact@valencesoftware.com"
             className="hover:text-foreground transition-colors"
