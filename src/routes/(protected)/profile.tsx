@@ -22,7 +22,7 @@ function RouteComponent() {
   if (isPending) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
-        <Spinner>Loading...</Spinner>
+        <Spinner />
       </div>
     );
   }

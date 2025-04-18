@@ -82,7 +82,7 @@ export const SupabaseProvider = ({
   if (!initialized) {
     return (
       <div className="flex flex-col items-center justify-center w-screen h-screen">
-        <Spinner>Loading...</Spinner>
+        <Spinner />
       </div>
     );
   }

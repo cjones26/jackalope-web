@@ -1,8 +1,14 @@
-import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
+import {
+  createFileRoute,
+  Link,
+  Navigate,
+  Outlet,
+} from '@tanstack/react-router';
 
 import Icon from '@/assets/icon.png';
 import IconDark from '@/assets/icon-dark.png';
 import Footer from '@/shared/components/Footer';
+import { useSupabase } from '@/shared/context/supabase';
 import { useTheme } from '@/shared/context/theme';
 
 export const Route = createFileRoute('/(public)')({
@@ -11,6 +17,11 @@ export const Route = createFileRoute('/(public)')({
 
 function RouteComponent() {
   const { colorScheme } = useTheme();
+  const { session } = useSupabase();
+
+  if (session) {
+    return <Navigate to="/profile" />;
+  }
 
   return (
     <>
