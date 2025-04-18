@@ -19,13 +19,10 @@ export const SupabaseProvider = ({
   const [initialized, setInitialized] = useState<boolean>(false);
 
   const signUp = async (email: string, password: string) => {
-    const { error, data } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
     });
-
-    console.log('signupData: ', data);
-    console.log('signupError: ', error);
 
     if (error) {
       throw error;
@@ -48,13 +45,35 @@ export const SupabaseProvider = ({
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
+    try {
+      // First attempt to sign out through Supabase
+      const { error } = await supabase.auth.signOut();
 
-    if (error) {
-      throw error;
+      if (error) {
+        throw error;
+      }
+    } catch (err) {
+      // If it's an AuthSessionMissingError, we can just redirect anyway
+      if (
+        err instanceof Error &&
+        err.message?.includes('Auth session missing')
+      ) {
+        console.log('No active session found, redirecting anyway');
+      } else {
+        console.error('Unexpected error during sign out:', err);
+      }
+    } finally {
+      const supabaseKeys = Object.keys(localStorage).filter((key) =>
+        key.startsWith('sb-')
+      );
+
+      supabaseKeys.forEach((key) => {
+        localStorage.removeItem(key);
+      });
+
+      // Then navigate home
+      router.navigate({ to: '/' });
     }
-
-    router.navigate({ to: '/' });
   };
 
   useEffect(() => {
@@ -82,7 +101,7 @@ export const SupabaseProvider = ({
   if (!initialized) {
     return (
       <div className="flex flex-col items-center justify-center w-screen h-screen">
-        <Spinner />
+        <Spinner>Loading...</Spinner>
       </div>
     );
   }
