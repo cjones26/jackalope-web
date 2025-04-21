@@ -7,7 +7,6 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { Plus, Trash, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -44,21 +43,36 @@ interface DeleteResponse {
   success: boolean;
 }
 
-// Default column width for the masonry layout
-const DEFAULT_COLUMN_WIDTH = 240;
-const DEFAULT_GAP = 16;
+// Define breakpoints for responsive design
+const BREAKPOINTS = {
+  sm: 640, // 1 column
+  md: 768, // 2 columns
+  lg: 1024, // 3 columns
+  xl: 1280, // 4 columns
+  '2xl': 1536, // 5 columns
+};
 
 function RouteComponent() {
   const { fetchWithAuth } = useApi();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const parentRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [width] = useWindowSize();
+
+  // Determine column count based on screen width
+  const getColumnCount = () => {
+    if (width < BREAKPOINTS.md) return 1;
+    if (width < BREAKPOINTS.lg) return 2;
+    if (width < BREAKPOINTS.xl) return 3;
+    if (width < BREAKPOINTS['2xl']) return 4;
+    return 5;
+  };
+
+  const columnCount = getColumnCount();
 
   const {
     data,
@@ -90,92 +104,37 @@ function RouteComponent() {
     },
   });
 
-  // Flatten all images from all pages into a single array -- might have performance issues later!
+  // Flatten all images from all pages into a single array
   const imageData = useMemo(
     () => data?.pages.flatMap((page) => page.images) || [],
     [data]
   );
 
-  // Calculate number of columns based on parent container width instead of window width
-  const columnCount = useMemo(() => {
-    if (!width || !parentRef.current) return 1;
-    const containerWidth = parentRef.current.clientWidth;
-    return Math.max(
-      1,
-      Math.floor((containerWidth - 32) / (DEFAULT_COLUMN_WIDTH + DEFAULT_GAP))
-    );
-  }, [width]);
+  // Calculate grid of images for proper masonry layout
+  const gridLayout = useMemo(() => {
+    if (!columnCount || !imageData.length) return [];
 
-  // Calculate total width for all columns (for centering)
-  const totalColumnsWidth = useMemo(() => {
-    return columnCount * DEFAULT_COLUMN_WIDTH + (columnCount - 1) * DEFAULT_GAP;
-  }, [columnCount]);
+    // Create array of column heights
+    const columnHeights = Array(columnCount).fill(0);
+    // Create array of columns with images
+    const columns = Array.from({ length: columnCount }, () => []);
 
-  // Create a masonry layout by distributing images into columns
-  const columns = useMemo(() => {
-    if (!imageData.length || columnCount <= 0) return [];
+    // Place each image in the shortest column
+    imageData.forEach((image) => {
+      const shortestColumnIndex = columnHeights.indexOf(
+        Math.min(...columnHeights)
+      );
+      columns[shortestColumnIndex].push(image);
 
-    // Create empty columns
-    const cols: GalleryImage[][] = Array.from(
-      { length: columnCount },
-      () => []
-    );
-
-    imageData.forEach((image, index) => {
-      const columnIndex = index % columnCount;
-      cols[columnIndex].push(image);
+      // Update the column height (approximate based on aspect ratio)
+      const aspectRatio = image.width / image.height || 1;
+      // Assuming a standard column width, calculate the height this image would add
+      const imageHeight = 100 / columnCount / aspectRatio;
+      columnHeights[shortestColumnIndex] += imageHeight;
     });
 
-    return cols;
+    return columns;
   }, [imageData, columnCount]);
-
-  const columnVirtualizer = useVirtualizer({
-    horizontal: true,
-    count: columns.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => DEFAULT_COLUMN_WIDTH + DEFAULT_GAP,
-    overscan: 2,
-  });
-
-  // Update columns when container width changes
-  useEffect(() => {
-    const resizeObserver = new ResizeObserver(() => {
-      if (parentRef.current) {
-        const containerWidth = parentRef.current.clientWidth;
-        const newColumnCount = Math.max(
-          1,
-          Math.floor(
-            (containerWidth - 32) / (DEFAULT_COLUMN_WIDTH + DEFAULT_GAP)
-          )
-        );
-        if (newColumnCount !== columnCount) {
-          // Force a re-render
-          columnVirtualizer.measure();
-        }
-      }
-    });
-
-    if (parentRef.current) {
-      resizeObserver.observe(parentRef.current);
-    }
-
-    return () => resizeObserver.disconnect();
-  }, [columnCount, columnVirtualizer]);
-
-  // Helper function to calculate column height based on image aspect ratios
-  function getColumnHeight(column: GalleryImage[]): number {
-    return column.reduce((height, image) => {
-      const aspectRatio = image.width / image.height;
-      const imageHeight = DEFAULT_COLUMN_WIDTH / aspectRatio;
-      return height + imageHeight + DEFAULT_GAP;
-    }, 0);
-  }
-
-  // Find the tallest column to set the container height
-  const containerHeight = useMemo(() => {
-    if (!columns.length) return 0;
-    return Math.max(...columns.map(getColumnHeight));
-  }, [columns]);
 
   // Handle infinite scroll loading
   useEffect(() => {
@@ -183,9 +142,7 @@ function RouteComponent() {
       if (
         !isFetchingNextPage &&
         hasNextPage &&
-        parentRef.current &&
-        window.innerHeight + window.scrollY >=
-          parentRef.current.offsetHeight + parentRef.current.offsetTop - 1000
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - 800
       ) {
         fetchNextPage();
       }
@@ -195,13 +152,11 @@ function RouteComponent() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-  // Handle successful image upload
   const handleImageAdded = useCallback(() => {
     refetch();
     setIsAddDialogOpen(false);
   }, [refetch]);
 
-  // Handle image update OR deletion
   const handleImageUpdated = useCallback(
     (deletedImageId: string | undefined) => {
       if (deletedImageId) {
@@ -234,7 +189,8 @@ function RouteComponent() {
     setIsMultiSelectMode(!isMultiSelectMode);
   };
 
-  const toggleImageSelection = (imageId: string) => {
+  const toggleImageSelection = (imageId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
     setSelectedImageIds((prev) => {
       if (prev.includes(imageId)) {
         return prev.filter((id) => id !== imageId);
@@ -246,7 +202,7 @@ function RouteComponent() {
 
   const handleImageClick = (image: GalleryImage) => {
     if (isMultiSelectMode) {
-      toggleImageSelection(image._id);
+      toggleImageSelection(image._id, event);
     } else {
       setSelectedImage(image);
     }
@@ -295,7 +251,7 @@ function RouteComponent() {
       setIsMultiSelectMode(false);
       setIsDeleteDialogOpen(false);
 
-      toast('Images Deleted', {
+      toast.info('Images Deleted', {
         description: `Successfully deleted ${data.deletedCount} images`,
       });
 
@@ -339,15 +295,13 @@ function RouteComponent() {
   // For all errors, including 404, we'll show the empty state with upload option
   if (isError || imageData.length === 0) {
     return (
-      <div className="flex flex-1 flex-col gap-y-4 p-4">
+      <div className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto">
         <div className="flex justify-between items-center">
           <H3>{getGalleryTitle()}</H3>
-          {!isError || error?.status !== 404 ? (
-            <Button onClick={() => setIsAddDialogOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Add Image
-            </Button>
-          ) : null}
+          <Button onClick={() => setIsAddDialogOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add Image
+          </Button>
         </div>
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <p className="text-muted-foreground mb-4">
@@ -361,10 +315,6 @@ function RouteComponent() {
               return 'Your gallery is empty. Upload your first image to get started.';
             })()}
           </p>
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add Image
-          </Button>
         </div>
         <AddImageDialog
           open={isAddDialogOpen}
@@ -376,152 +326,114 @@ function RouteComponent() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-y-4 p-4" ref={scrollRef}>
-      <div className="relative w-full">
-        <div
-          className="absolute"
-          style={{
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: totalColumnsWidth + 'px',
-          }}
-        >
-          <div className="w-full flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-0">
-            <H3>{getGalleryTitle()}</H3>
-            <div className="flex flex-row gap-2">
-              {isMultiSelectMode ? (
-                <>
-                  <span className="text-sm self-center mr-2">
-                    {selectedImageIds.length} selected
-                  </span>
-                  {selectedImageIds.length > 0 && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleDeleteButtonClick}
-                      disabled={deleteMultipleMutation.isPending}
-                    >
-                      <Trash className="h-4 w-4 mr-1" />
-                      Delete Selected
-                    </Button>
-                  )}
-                  {selectedImageIds.length < imageData.length ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={selectAllImages}
-                    >
-                      Select All
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={clearSelections}
-                    >
-                      Clear All
-                    </Button>
-                  )}
+    <div
+      className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto"
+      ref={containerRef}
+    >
+      {/* Header */}
+      <div className="w-full mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-0">
+          <H3>{getGalleryTitle()}</H3>
+          <div className="flex flex-row gap-2">
+            {isMultiSelectMode ? (
+              <>
+                <span className="text-sm self-center mr-2">
+                  {selectedImageIds.length} selected
+                </span>
+                {selectedImageIds.length > 0 && (
                   <Button
-                    variant="outline"
+                    variant="destructive"
                     size="sm"
-                    onClick={toggleMultiSelectMode}
+                    onClick={handleDeleteButtonClick}
+                    disabled={deleteMultipleMutation.isPending}
                   >
-                    <X className="h-4 w-4 mr-1" />
-                    Cancel
+                    <Trash className="h-4 w-4 mr-1" />
+                    Delete Selected
                   </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="outline" onClick={toggleMultiSelectMode}>
-                    Select Multiple
+                )}
+                {selectedImageIds.length < imageData.length ? (
+                  <Button variant="outline" size="sm" onClick={selectAllImages}>
+                    Select All
                   </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={clearSelections}>
+                    Clear All
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleMultiSelectMode}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={toggleMultiSelectMode}>
+                  Select Multiple
+                </Button>
 
-                  <Button onClick={() => setIsAddDialogOpen(true)}>
-                    <Plus className="h-4 w-4" />
-                    Add Image
-                  </Button>
-                </>
-              )}
-            </div>
+                <Button onClick={() => setIsAddDialogOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Add Image
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
-      <div className="h-16 md:h-10"></div>
+
+      {/* Gallery Grid - CSS Grid for Masonry Layout */}
       <div
-        ref={parentRef}
-        className="overflow-hidden w-full relative"
-        style={{ minHeight: containerHeight }}
+        className="w-full grid gap-4"
+        style={{
+          gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
+        }}
       >
-        <div
-          className="absolute"
-          style={{
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: totalColumnsWidth + 'px',
-          }}
-        >
-          <div className="flex gap-4">
-            {columnVirtualizer.getVirtualItems().map((virtualColumn) => {
-              const columnIndex = virtualColumn.index;
-              const columnItems = columns[columnIndex] || [];
+        {gridLayout.map((column, colIndex) => (
+          <div key={`column-${colIndex}`} className="flex flex-col gap-4">
+            {column.map((image) => {
+              const isSelected = selectedImageIds.includes(image._id);
+              const aspectRatio = image.width / image.height || 1;
 
               return (
                 <div
-                  key={virtualColumn.key}
-                  className="flex flex-col gap-4"
-                  style={{
-                    width: DEFAULT_COLUMN_WIDTH,
-                    position: 'relative',
-                  }}
+                  key={image._id}
+                  className={`relative overflow-hidden rounded-md shadow-md cursor-pointer hover:shadow-lg transition-shadow ${
+                    isSelected ? 'ring-2 ring-primary' : ''
+                  }`}
+                  style={{ aspectRatio: `${aspectRatio}` }}
+                  onClick={() => handleImageClick(image)}
                 >
-                  {columnItems.map((image) => {
-                    const aspectRatio = image.width / image.height;
-                    const height = DEFAULT_COLUMN_WIDTH / aspectRatio;
-                    const isSelected = selectedImageIds.includes(image._id);
-
-                    return (
-                      <div
-                        key={image._id}
-                        className={`relative overflow-hidden rounded-md shadow-md cursor-pointer hover:shadow-lg transition-shadow ${
-                          isSelected ? 'ring-2 ring-primary' : ''
-                        }`}
-                        style={{ height }}
-                        onClick={() => handleImageClick(image)}
-                      >
-                        <img
-                          src={image.url}
-                          alt={image.title || 'Gallery image'}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                        {isMultiSelectMode && (
-                          <div
-                            className="absolute top-2 right-2 bg-background rounded-md flex items-center justify-center w-6 h-6"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleImageSelection(image._id);
-                            }}
-                          >
-                            <Checkbox
-                              checked={isSelected}
-                              className="data-[state=checked]:bg-primary"
-                            />
-                          </div>
-                        )}
-                        {image.title && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-sm truncate">
-                            {image.title}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  <img
+                    src={image.url}
+                    alt={image.title || 'Gallery image'}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  {isMultiSelectMode && (
+                    <div
+                      className="absolute top-2 right-2 bg-background rounded-md flex items-center justify-center w-6 h-6"
+                      onClick={(e) => toggleImageSelection(image._id, e)}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
+                  )}
+                  {image.title && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-sm truncate">
+                      {image.title}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-        </div>
+        ))}
       </div>
 
       {isFetchingNextPage && (
