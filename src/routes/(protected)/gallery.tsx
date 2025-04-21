@@ -112,12 +112,15 @@ function RouteComponent() {
 
   // Calculate grid of images for proper masonry layout
   const gridLayout = useMemo(() => {
-    if (!columnCount || !imageData.length) return [];
+    if (!columnCount || !imageData.length) return [] as GalleryImage[][];
 
     // Create array of column heights
     const columnHeights = Array(columnCount).fill(0);
     // Create array of columns with images
-    const columns = Array.from({ length: columnCount }, () => []);
+    const columns: GalleryImage[][] = Array.from(
+      { length: columnCount },
+      () => []
+    );
 
     // Place each image in the shortest column
     imageData.forEach((image) => {
@@ -189,8 +192,13 @@ function RouteComponent() {
     setIsMultiSelectMode(!isMultiSelectMode);
   };
 
-  const toggleImageSelection = (imageId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
+  const toggleImageSelection = (
+    imageId: string,
+    event: React.MouseEvent | MouseEvent
+  ) => {
+    if (event) {
+      event.stopPropagation();
+    }
     setSelectedImageIds((prev) => {
       if (prev.includes(imageId)) {
         return prev.filter((id) => id !== imageId);
@@ -200,9 +208,9 @@ function RouteComponent() {
     });
   };
 
-  const handleImageClick = (image: GalleryImage) => {
+  const handleImageClick = (image: GalleryImage, event?: React.MouseEvent) => {
     if (isMultiSelectMode) {
-      toggleImageSelection(image._id, event);
+      toggleImageSelection(image._id, event || new MouseEvent('click'));
     } else {
       setSelectedImage(image);
     }
@@ -405,7 +413,7 @@ function RouteComponent() {
                     isSelected ? 'ring-2 ring-primary' : ''
                   }`}
                   style={{ aspectRatio: `${aspectRatio}` }}
-                  onClick={() => handleImageClick(image)}
+                  onClick={(e) => handleImageClick(image, e)}
                 >
                   <img
                     src={image.url}
