@@ -497,7 +497,7 @@ function RouteComponent() {
                         />
                         {isMultiSelectMode && (
                           <div
-                            className="absolute top-2 right-2 bg-background rounded-md p-1"
+                            className="absolute top-2 right-2 bg-background rounded-md flex items-center justify-center w-6 h-6"
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleImageSelection(image._id);
