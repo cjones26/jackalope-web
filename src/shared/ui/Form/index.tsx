@@ -6,4 +6,5 @@ export {
   FormItem,
   FormLabel,
   FormMessage,
+  FormTextarea,
 } from './Form';

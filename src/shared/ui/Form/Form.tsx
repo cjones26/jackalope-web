@@ -13,6 +13,7 @@ import { Label } from '@/shared/ui/Label';
 import { cn } from '@/shared/ui/utils';
 
 import { Input } from '../Input';
+import { Textarea } from '../Textarea';
 import { FormFieldContext, FormItemContext, useFormField } from './context';
 
 const Form = FormProvider;
@@ -165,6 +166,59 @@ function FormInput({
   );
 }
 
+// Added Textarea component integration
+function FormTextarea({
+  label,
+  description,
+  className,
+  onChange,
+  ...props
+}: {
+  label?: string;
+  description?: string;
+  onChange: ChangeEventHandler<HTMLTextAreaElement> | undefined;
+} & React.ComponentProps<'textarea'>) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { error, formItemId, formDescriptionId, formMessageId } =
+    useFormField();
+
+  function handleOnLabelPress() {
+    if (textareaRef.current) {
+      if (document.activeElement === textareaRef.current) {
+        textareaRef.current.blur();
+      } else {
+        textareaRef.current.focus();
+      }
+    }
+  }
+
+  return (
+    <FormItem className={className}>
+      {!!label && (
+        <FormLabel id={formItemId} onClick={handleOnLabelPress}>
+          {label}
+        </FormLabel>
+      )}
+      <FormControl>
+        <Textarea
+          ref={textareaRef}
+          aria-labelledby={formItemId}
+          aria-describedby={
+            !error
+              ? `${formDescriptionId}`
+              : `${formDescriptionId} ${formMessageId}`
+          }
+          aria-invalid={!!error}
+          onChange={onChange}
+          {...props}
+        />
+      </FormControl>
+      {!!description && <FormDescription>{description}</FormDescription>}
+      <FormMessage />
+    </FormItem>
+  );
+}
+
 export {
   Form,
   FormControl,
@@ -174,4 +228,5 @@ export {
   FormItem,
   FormLabel,
   FormMessage,
+  FormTextarea,
 };

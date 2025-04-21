@@ -75,17 +75,14 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
 
-      // Fix: Manually set the file in the form
       form.setValue('profileImage', file, { shouldValidate: true });
     }
   };
 
-  // Trigger the file input click
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
   };
 
-  // Fix: Update the mutation function type
   const profileMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
       const formData = new FormData();
@@ -124,13 +121,11 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
     profileMutation.mutate(data);
   }
 
-  // Fix: Define a manual form reset function
   const handleFormChange = () => {
     profileMutation.reset();
     setSuccessMessage('');
   };
 
-  // Get the user's initials for the avatar fallback
   const getInitials = () => {
     if (form.watch('firstName') && form.watch('lastName')) {
       return `${form.watch('firstName')[0]}${form.watch('lastName')[0]}`.toUpperCase();
@@ -147,7 +142,6 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
         onChange={handleFormChange}
         className="flex flex-col items-center gap-6 w-full max-w-md"
       >
-        {/* Avatar upload section */}
         <div className="flex flex-col items-center justify-center gap-3">
           <div
             className="relative cursor-pointer group"
@@ -165,15 +159,11 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
                   {getInitials()}
                 </AvatarFallback>
               ) : null}
-
-              {/* Overlay for hover effect */}
               <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                 <Camera className="w-6 h-6 text-white" />
               </div>
             </Avatar>
           </div>
-
-          {/* Fix: Don't use form.register for the file input */}
           <input
             type="file"
             className="hidden"
@@ -181,18 +171,15 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
             ref={fileInputRef}
             onChange={handleFileChange}
           />
-
           <span className="text-sm text-muted-foreground">
             Click to upload a profile photo
           </span>
-
           {form.formState.errors.profileImage && (
             <p className="text-sm text-destructive">
               {form.formState.errors.profileImage.message}
             </p>
           )}
         </div>
-
         <div className="w-full flex flex-col items-center space-y-4">
           <FormField
             control={form.control}
@@ -222,7 +209,6 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
               />
             )}
           />
-
           {profileMutation.isError ? (
             <p className="font-medium text-destructive w-full break-words text-center text-sm">
               There was an error saving your profile. Please try again.
@@ -233,7 +219,6 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
               {successMessage}
             </p>
           ) : null}
-
           <Button
             type="submit"
             className={`w-full lg:w-80 ${
