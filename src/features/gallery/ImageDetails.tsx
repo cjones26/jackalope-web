@@ -27,14 +27,6 @@ import {
   AlertDialogTitle,
 } from '@/shared/ui/AlertDialog';
 import { Button } from '@/shared/ui/Button';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/shared/ui/Dialog';
 import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput, FormTextarea } from '@/shared/ui/Form/Form';
 import { TagInput } from '@/shared/ui/TagInput';
@@ -88,6 +80,8 @@ export function ImageDetails({
 
   // Handle keyboard navigation
   useEffect(() => {
+    if (!open) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Disable navigation when editing
       if (isEditing) {
@@ -106,7 +100,7 @@ export function ImageDetails({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, isEditing, allImages]);
+  }, [currentIndex, isEditing, allImages, open]);
 
   // Form setup
   const form = useForm<ImageEditFormData>({
@@ -186,206 +180,256 @@ export function ImageDetails({
     },
   });
 
+  if (!open) return null;
+
   return (
     <>
-      <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="wrap-break-word">
-              {isEditing
-                ? 'Edit Image Details'
-                : currentImage.title || 'Image Details'}
-            </DialogTitle>
-            <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-              <X className="h-4 w-4" />
+      {/* Full-screen overlay */}
+      <div className="fixed inset-0 z-50 bg-background flex flex-col animate-in fade-in duration-200">
+        {/* Header with title and close button */}
+        <div className="flex items-center justify-between border-b p-4 h-16">
+          <h2 className="text-xl font-semibold truncate max-w-2xl">
+            {isEditing ? 'Edit Image' : currentImage.title || 'Image Details'}
+          </h2>
+          <div className="flex items-center gap-2">
+            {!isEditing && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDelete}
+                  className="text-destructive border-destructive hover:bg-destructive/10"
+                >
+                  <Trash className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              </>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="rounded-full hover:bg-muted"
+            >
+              <X className="h-5 w-5" />
               <span className="sr-only">Close</span>
-            </DialogClose>
-          </DialogHeader>
+            </Button>
+          </div>
+        </div>
 
-          {isEditing ? (
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(handleSubmit)}
-                className="space-y-4"
-              >
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormInput
-                      type="text"
-                      label="Title"
-                      placeholder="Image title"
-                      {...field}
-                    />
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormTextarea
-                      label="Description"
-                      placeholder="Image description"
-                      className="min-h-24"
-                      {...field}
-                    />
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="tags"
-                  render={({ field }) => (
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Tags</label>
+        {/* Main content area */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Image section (left 3/4) */}
+          <div className="w-3/4 relative bg-black flex items-center justify-center">
+            {/* Navigation buttons */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={navigateToPrevious}
+              disabled={currentIndex <= 0 || isEditing}
+              className="absolute left-4 bg-black/30 hover:bg-black/50 text-white rounded-full z-10"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={navigateToNext}
+              disabled={currentIndex >= allImages.length - 1 || isEditing}
+              className="absolute right-4 bg-black/30 hover:bg-black/50 text-white rounded-full z-10"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </Button>
+
+            {/* Image with max dimensions to maintain aspect ratio */}
+            <div className="relative w-full h-full flex items-center justify-center">
+              <img
+                src={currentImage.url}
+                alt={currentImage.title || 'Gallery image'}
+                className="max-h-full max-w-full object-contain"
+              />
+
+              {/* Navigation indicator */}
+              {!isEditing && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1.5 rounded-full text-sm font-medium">
+                  {currentIndex + 1} / {allImages.length}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Details section (right 1/4) */}
+          <div className="w-1/4 overflow-y-auto p-6 border-l">
+            {isEditing ? (
+              <Form {...form}>
+                <form
+                  onSubmit={form.handleSubmit(handleSubmit)}
+                  className="space-y-6"
+                >
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormInput
+                        type="text"
+                        label="Title"
+                        placeholder="Image title"
+                        {...field}
+                      />
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormTextarea
+                        label="Description"
+                        placeholder="Image description"
+                        className="min-h-32"
+                        {...field}
+                      />
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="tags"
+                    render={({ field }) => (
                       <TagInput
+                        label="Tags"
                         placeholder="Add tags (press Enter after each tag)"
                         tags={field.value || []}
                         onTagsChange={field.onChange}
                       />
-                    </div>
-                  )}
-                />
-                {updateMutation.isError ? (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>
-                      There was an error updating the image details. Please try
-                      again.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsEditing(false)}
-                    disabled={updateMutation.isPending}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={
-                      !form.formState.isDirty || updateMutation.isPending
-                    }
-                  >
-                    {updateMutation.isPending ? (
-                      'Saving...'
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        Save Changes
-                      </>
                     )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="relative rounded-md overflow-hidden">
-                {/* Navigation buttons */}
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 p-2 z-10">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={navigateToPrevious}
-                    disabled={currentIndex <= 0}
-                    className="bg-black/30 hover:bg-black/50 text-white rounded-full"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                    <span className="sr-only">Previous image</span>
-                  </Button>
-                </div>
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 p-2 z-10">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={navigateToNext}
-                    disabled={currentIndex >= allImages.length - 1}
-                    className="bg-black/30 hover:bg-black/50 text-white rounded-full"
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                    <span className="sr-only">Next image</span>
-                  </Button>
-                </div>
-                <img
-                  src={currentImage.url}
-                  alt={currentImage.title || 'Gallery image'}
-                  className="w-full h-auto object-contain"
-                />
-                {/* Navigation indicator */}
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white px-2 py-1 rounded-full text-xs">
-                  {currentIndex + 1} / {allImages.length}
-                </div>
-              </div>
-              <div className="space-y-4">
-                {currentImage.title && (
-                  <div>
-                    <h3 className="text-lg font-medium">Title</h3>
-                    <p className="wrap-break-word">{currentImage.title}</p>
+                  />
+                  {updateMutation.isError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Error</AlertTitle>
+                      <AlertDescription>
+                        There was an error updating the image details.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="flex items-center justify-between gap-4 pt-4 mt-8">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsEditing(false)}
+                      disabled={updateMutation.isPending}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={
+                        !form.formState.isDirty || updateMutation.isPending
+                      }
+                      className="flex-1"
+                    >
+                      {updateMutation.isPending ? (
+                        'Saving...'
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Save
+                        </>
+                      )}
+                    </Button>
                   </div>
-                )}
-                {currentImage.description && (
-                  <div>
-                    <h3 className="text-lg font-medium">Description</h3>
-                    <p className="whitespace-pre-wrap">
-                      {currentImage.description}
-                    </p>
+                </form>
+              </Form>
+            ) : (
+              <div className="space-y-8">
+                <div>
+                  <h3 className="text-lg font-medium text-primary mb-1">
+                    Details
+                  </h3>
+                  <div className="space-y-4">
+                    {currentImage.title && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          Title
+                        </h4>
+                        <p className="wrap-break-word text-lg">
+                          {currentImage.title}
+                        </p>
+                      </div>
+                    )}
+
+                    {currentImage.description && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          Description
+                        </h4>
+                        <p className="whitespace-pre-wrap">
+                          {currentImage.description}
+                        </p>
+                      </div>
+                    )}
+
+                    {currentImage.tags && currentImage.tags.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          Tags
+                        </h4>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {currentImage.tags.map((tag: string) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-                {currentImage.tags && currentImage.tags.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-medium">Tags</h3>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {currentImage.tags.map((tag: string) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                </div>
+
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-medium text-primary mb-1">
+                    Metadata
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground">
+                        Format
+                      </h4>
+                      <p>{currentImage.format.toUpperCase()}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground">
+                        Dimensions
+                      </h4>
+                      <p>
+                        {currentImage.width} × {currentImage.height} px
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <h4 className="text-sm font-medium text-muted-foreground">
+                        Upload Date
+                      </h4>
+                      <p>{formatUploadDate(currentImage.uploadedAt)}</p>
                     </div>
                   </div>
-                )}
-                <div>
-                  <h3 className="text-lg font-medium">Upload Date</h3>
-                  <p>{formatUploadDate(currentImage.uploadedAt)}</p>
                 </div>
-                <div>
-                  <h3 className="text-lg font-medium">Image Details</h3>
-                  <p>
-                    {currentImage.width} × {currentImage.height} pixels •{' '}
-                    {currentImage.format.toUpperCase()}
-                  </p>
-                </div>
-                <DialogFooter className="pt-4">
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={handleDelete}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="default"
-                    onClick={() => setIsEditing(true)}
-                  >
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                </DialogFooter>
               </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog
