@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Trash2, Upload, X } from 'lucide-react';
 import { nanoid } from 'nanoid';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -70,6 +70,7 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewUrlsRef = useRef<Map<string, string>>(new Map());
   const { fetchWithAuth } = useApi();
 
   const form = useForm<UploadFormData>({
@@ -85,9 +86,20 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
   });
 
   // Get preview URL for a file
-  const getPreviewUrl = (file: File): string => {
-    return URL.createObjectURL(file);
-  };
+  const getPreviewUrl = useCallback((file: File): string => {
+    // Create a unique key for this file
+    const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
+
+    // Return existing URL if available
+    if (previewUrlsRef.current.has(fileKey)) {
+      return previewUrlsRef.current.get(fileKey)!;
+    }
+
+    // Create and store new URL
+    const url = URL.createObjectURL(file);
+    previewUrlsRef.current.set(fileKey, url);
+    return url;
+  }, []);
 
   // Handle file selection
   const handleFilesSelected = (files: FileList | null) => {
@@ -269,15 +281,15 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
 
   // Clean up object URLs when component unmounts
   useEffect(() => {
+    const previewUrlsMap = previewUrlsRef.current;
     return () => {
-      // Clean up any created object URLs
-      fields.forEach((field) => {
-        if ((field as any).previewUrl) {
-          URL.revokeObjectURL((field as any).previewUrl);
-        }
+      // Clean up all object URLs
+      previewUrlsMap.forEach((url) => {
+        URL.revokeObjectURL(url);
       });
+      previewUrlsMap.clear();
     };
-  }, [fields]);
+  }, []);
 
   return (
     <Form {...form}>
@@ -480,7 +492,6 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                             placeholder="Add tags (press Enter after each tag)"
                             tags={field.value || []}
                             onTagsChange={field.onChange}
-                            name={`images.${currentImageIndex}.tags`}
                           />
                         </div>
                       )}
