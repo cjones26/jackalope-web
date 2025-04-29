@@ -457,8 +457,10 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                     />
                   </div>
 
+                  {/* BUGFIX: Added key props to form fields to ensure they re-render when currentImageIndex changes */}
                   <div className="space-y-3">
                     <FormField
+                      key={`title-field-${currentImageIndex}`}
                       control={form.control}
                       name={`images.${currentImageIndex}.title`}
                       render={({ field }) => (
@@ -471,6 +473,7 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                       )}
                     />
                     <FormField
+                      key={`description-field-${currentImageIndex}`}
                       control={form.control}
                       name={`images.${currentImageIndex}.description`}
                       render={({ field }) => (
@@ -483,6 +486,7 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                       )}
                     />
                     <FormField
+                      key={`tags-field-${currentImageIndex}`}
                       control={form.control}
                       name={`images.${currentImageIndex}.tags`}
                       render={({ field }) => (
