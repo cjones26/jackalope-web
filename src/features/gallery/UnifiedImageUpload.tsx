@@ -456,8 +456,6 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                       className="max-w-full max-h-[200px] object-contain"
                     />
                   </div>
-
-                  {/* BUGFIX: Added key props to form fields to ensure they re-render when currentImageIndex changes */}
                   <div className="space-y-3">
                     <FormField
                       key={`title-field-${currentImageIndex}`}
