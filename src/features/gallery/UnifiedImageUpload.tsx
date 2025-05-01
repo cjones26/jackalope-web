@@ -506,7 +506,8 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                 <div className="text-center">
                   <h3 className="text-lg font-medium">No Images Selected</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Add images using the panel on the left to edit their details
+                    Add image(s) using the panel on the left to edit their
+                    details
                   </p>
                 </div>
                 <Button

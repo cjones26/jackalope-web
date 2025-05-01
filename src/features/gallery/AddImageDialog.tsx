@@ -31,7 +31,7 @@ export function AddImageDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Images</DialogTitle>
+          <DialogTitle>Add Image(s)</DialogTitle>
           <DialogDescription>
             Upload one or more images to your gallery. Drag and drop multiple
             files or select them individually.

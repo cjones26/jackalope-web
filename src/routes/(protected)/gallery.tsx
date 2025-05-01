@@ -308,7 +308,7 @@ function RouteComponent() {
           <H3>{getGalleryTitle()}</H3>
           <Button onClick={() => setIsAddDialogOpen(true)}>
             <Plus className="h-4 w-4" />
-            Add Image
+            Add Image(s)
           </Button>
         </div>
         <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -385,7 +385,7 @@ function RouteComponent() {
 
                 <Button onClick={() => setIsAddDialogOpen(true)}>
                   <Plus className="h-4 w-4" />
-                  Add Image
+                  Add Image(s)
                 </Button>
               </>
             )}
