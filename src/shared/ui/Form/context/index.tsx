@@ -14,7 +14,7 @@ export type FormFieldContextValue<
 };
 
 export const FormFieldContext = React.createContext<FormFieldContextValue>(
-  {} as FormFieldContextValue
+  {} as FormFieldContextValue,
 );
 
 export type FormItemContextValue = {
@@ -22,7 +22,7 @@ export type FormItemContextValue = {
 };
 
 export const FormItemContext = React.createContext<FormItemContextValue>(
-  {} as FormItemContextValue
+  {} as FormItemContextValue,
 );
 
 export const useFormField = () => {

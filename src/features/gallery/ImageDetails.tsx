@@ -62,7 +62,7 @@ export function ImageDetails({
 
   // Get current image index in the array
   const currentIndex = allImages.findIndex(
-    (img) => img._id === currentImage._id
+    (img) => img._id === currentImage._id,
   );
 
   // Navigation functions
@@ -80,7 +80,9 @@ export function ImageDetails({
 
   // Handle keyboard navigation
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Disable navigation when editing
@@ -180,7 +182,9 @@ export function ImageDetails({
     },
   });
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   return (
     <>

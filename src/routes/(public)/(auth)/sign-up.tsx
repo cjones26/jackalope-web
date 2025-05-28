@@ -7,8 +7,8 @@ import { useSupabase } from '@/shared/context/supabase';
 import { Button } from '@/shared/ui/Button';
 import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput } from '@/shared/ui/Form/Form';
-import { H1 } from '@/shared/ui/typography';
 import { Spinner } from '@/shared/ui/Spinner';
+import { H1 } from '@/shared/ui/typography';
 
 export const Route = createFileRoute('/(public)/(auth)/sign-up')({
   component: RouteComponent,
@@ -23,16 +23,16 @@ const signUpSchema = z
       .max(64, 'Please enter fewer than 64 characters.')
       .regex(
         /^(?=.*[a-z])/,
-        'Your password must have at least one lowercase letter.'
+        'Your password must have at least one lowercase letter.',
       )
       .regex(
         /^(?=.*[A-Z])/,
-        'Your password must have at least one uppercase letter.'
+        'Your password must have at least one uppercase letter.',
       )
       .regex(/^(?=.*[0-9])/, 'Your password must have at least one number.')
       .regex(
         /^(?=.*[!@#$%^&*])/,
-        'Your password must have at least one special character.'
+        'Your password must have at least one special character.',
       ),
     confirmPassword: z.string().min(8, 'Please enter at least 8 characters.'),
   })

@@ -56,7 +56,7 @@ export const SupabaseProvider = ({
       console.error('Error signing out:', error);
     } finally {
       const supabaseKeys = Object.keys(localStorage).filter((key) =>
-        key.startsWith('sb-')
+        key.startsWith('sb-'),
       );
 
       supabaseKeys.forEach((key) => {
@@ -93,7 +93,7 @@ export const SupabaseProvider = ({
   if (!initialized) {
     return (
       <div className="flex flex-col items-center justify-center w-screen h-screen">
-        <Spinner>Loading...</Spinner>
+        <Spinner />
       </div>
     );
   }

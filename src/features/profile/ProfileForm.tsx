@@ -1,138 +1,104 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Camera } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import DefaultAvatar from '@/assets/default-avatar.jpg';
-import { useApi } from '@/shared/hooks/useApi';
-import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/Avatar';
+import { useSupabase } from '@/shared/context/supabase';
+import { supabase } from '@/shared/services/supabase';
 import { Button } from '@/shared/ui/Button';
 import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput } from '@/shared/ui/Form/Form';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ACCEPTED_IMAGE_TYPES = [
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/webp',
-];
+import { ProfileAvatar } from './ProfileAvatar';
 
-// Fix: Update schema to handle File instead of FileList
 const profileSchema = z.object({
   firstName: z.string().min(1, 'First name is required.'),
   lastName: z.string().min(1, 'Last name is required.'),
-  profileImage: z
-    .custom<File>((val) => val instanceof File, {
-      message: 'profileImage must be a File object',
-    })
-    .refine(
-      (file) => !file || file.size <= MAX_FILE_SIZE,
-      'File size must be less than 5MB'
-    )
-    .refine(
-      (file) => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
-      'Only .jpg, .jpeg, .png, and .webp files are accepted'
-    )
-    .optional(),
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
 
 interface ProfileFormProps {
-  initialData?: {
-    first_name: string;
-    last_name: string;
-    profile_image?: string;
-  };
+  profile: {
+    first_name: string | null;
+    last_name: string | null;
+    avatar_url: string | null;
+  } | null;
 }
 
-export function ProfileForm({ initialData }: ProfileFormProps) {
+export function ProfileForm({ profile }: ProfileFormProps) {
   const [successMessage, setSuccessMessage] = useState('');
-  const [previewUrl, setPreviewUrl] = useState<string | null>(
-    initialData?.profile_image || null
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(
+    profile?.avatar_url || null,
   );
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { fetchWithAuth } = useApi();
   const queryClient = useQueryClient();
+  const { user } = useSupabase();
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      firstName: initialData?.first_name || '',
-      lastName: initialData?.last_name || '',
-      profileImage: undefined,
+      firstName: profile?.first_name || '',
+      lastName: profile?.last_name || '',
     },
   });
 
-  // Create a preview when the file is selected
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
+  // Update form and avatar URL when profile changes
+  useEffect(() => {
+    form.reset({
+      firstName: profile?.first_name || '',
+      lastName: profile?.last_name || '',
+    });
 
-      form.setValue('profileImage', file, { shouldValidate: true });
-    }
+    setAvatarUrl(profile?.avatar_url || null);
+  }, [profile, form]);
+
+  // Handle avatar URL changes from the ProfileAvatar component
+  const handleAvatarChange = (url: string | null) => {
+    setAvatarUrl(url);
   };
 
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const profileMutation = useMutation({
+  // Update profile in Supabase (only for name fields)
+  const userMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
-      const formData = new FormData();
-      formData.append('first_name', data.firstName);
-      formData.append('last_name', data.lastName);
-
-      if (data.profileImage) {
-        formData.append('profileImage', data.profileImage);
+      if (!user) {
+        throw new Error('User not authenticated');
       }
 
-      const method = initialData ? 'PUT' : 'POST';
+      const { error } = await supabase
+        .from('users')
+        .update({
+          avatar_url: avatarUrl,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
 
-      return fetchWithAuth('/profile', {
-        method,
-        body: formData,
-        headers: undefined,
-      });
+      if (error) {
+        throw error;
+      }
+
+      return {
+        first_name: data.firstName,
+        last_name: data.lastName,
+        avatar_url: avatarUrl,
+      };
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['profile'] });
-
-      setSuccessMessage(
-        initialData
-          ? 'Profile updated successfully!'
-          : 'Profile created successfully!'
-      );
-
-      if (data.profile_image) {
-        setPreviewUrl(data.profile_image);
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
+      setSuccessMessage('Profile updated successfully!');
     },
   });
 
   function onSubmit(data: ProfileFormData) {
     setSuccessMessage('');
-    profileMutation.mutate(data);
+    userMutation.mutate(data);
   }
 
   const handleFormChange = () => {
-    profileMutation.reset();
+    userMutation.reset();
     setSuccessMessage('');
-  };
-
-  const getInitials = () => {
-    if (form.watch('firstName') && form.watch('lastName')) {
-      return `${form.watch('firstName')[0]}${form.watch('lastName')[0]}`.toUpperCase();
-    }
-    return initialData && initialData.first_name && initialData.last_name
-      ? `${initialData.first_name[0]}${initialData.last_name[0]}`.toUpperCase()
-      : '';
   };
 
   return (
@@ -142,44 +108,13 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
         onChange={handleFormChange}
         className="flex flex-col items-center gap-6 w-full max-w-md"
       >
-        <div className="flex flex-col items-center justify-center gap-3">
-          <div
-            className="relative cursor-pointer group"
-            onClick={handleAvatarClick}
-          >
-            <Avatar className="h-24 w-24">
-              {previewUrl ? (
-                <AvatarImage src={previewUrl} alt="Profile" />
-              ) : (
-                <AvatarImage src={DefaultAvatar} alt="Default Profile" />
-              )}
-              {(form.watch('firstName') && form.watch('lastName')) ||
-              (initialData?.first_name && initialData?.last_name) ? (
-                <AvatarFallback className="text-lg">
-                  {getInitials()}
-                </AvatarFallback>
-              ) : null}
-              <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                <Camera className="w-6 h-6 text-white" />
-              </div>
-            </Avatar>
-          </div>
-          <input
-            type="file"
-            className="hidden"
-            accept="image/jpeg,image/png,image/webp"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-          />
-          <span className="text-sm text-muted-foreground">
-            Click to upload a profile photo
-          </span>
-          {form.formState.errors.profileImage && (
-            <p className="text-sm text-destructive">
-              {form.formState.errors.profileImage.message}
-            </p>
-          )}
-        </div>
+        <ProfileAvatar
+          avatarUrl={avatarUrl}
+          firstName={profile?.first_name}
+          lastName={profile?.last_name}
+          onAvatarChange={handleAvatarChange}
+        />
+
         <div className="w-full flex flex-col items-center space-y-4">
           <FormField
             control={form.control}
@@ -209,7 +144,7 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
               />
             )}
           />
-          {profileMutation.isError ? (
+          {userMutation.isError ? (
             <p className="font-medium text-destructive w-full break-words text-center text-sm">
               There was an error saving your profile. Please try again.
             </p>
@@ -222,14 +157,14 @@ export function ProfileForm({ initialData }: ProfileFormProps) {
           <Button
             type="submit"
             className={`w-full lg:w-80 ${
-              profileMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''
+              userMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''
             }`}
-            disabled={profileMutation.isPending}
+            disabled={userMutation.isPending}
           >
-            {profileMutation.isPending ? (
+            {userMutation.isPending ? (
               <span>Saving...</span>
             ) : (
-              <span>{initialData ? 'Update Profile' : 'Create Profile'}</span>
+              <span>Update Profile</span>
             )}
           </Button>
         </div>

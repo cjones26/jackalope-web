@@ -23,9 +23,15 @@ function TagInput({
   const addTag = (tag: string) => {
     const trimmedTag = tag.trim();
 
-    if (!trimmedTag) return;
-    if (tags.includes(trimmedTag)) return;
-    if (tags.length >= maxTags) return;
+    if (!trimmedTag) {
+      return;
+    }
+    if (tags.includes(trimmedTag)) {
+      return;
+    }
+    if (tags.length >= maxTags) {
+      return;
+    }
 
     onTagsChange([...tags, trimmedTag]);
     setInputValue('');

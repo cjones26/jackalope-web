@@ -65,10 +65,18 @@ function RouteComponent() {
 
   // Determine column count based on screen width
   const getColumnCount = () => {
-    if (width < BREAKPOINTS.md) return 1;
-    if (width < BREAKPOINTS.lg) return 2;
-    if (width < BREAKPOINTS.xl) return 3;
-    if (width < BREAKPOINTS['2xl']) return 4;
+    if (width < BREAKPOINTS.md) {
+      return 1;
+    }
+    if (width < BREAKPOINTS.lg) {
+      return 2;
+    }
+    if (width < BREAKPOINTS.xl) {
+      return 3;
+    }
+    if (width < BREAKPOINTS['2xl']) {
+      return 4;
+    }
     return 5;
   };
 
@@ -96,7 +104,7 @@ function RouteComponent() {
     Profile,
     ApiError
   >({
-    queryKey: ['profile'],
+    queryKey: ['user'],
     queryFn: () => fetchWithAuth('/profile'),
     // Don't throw errors for 404 (no profile yet)
     retry: (failureCount: number, error: ApiError) => {
@@ -107,25 +115,27 @@ function RouteComponent() {
   // Flatten all images from all pages into a single array
   const imageData = useMemo(
     () => data?.pages.flatMap((page) => page.images) || [],
-    [data]
+    [data],
   );
 
   // Calculate grid of images for proper masonry layout
   const gridLayout = useMemo(() => {
-    if (!columnCount || !imageData.length) return [] as GalleryImage[][];
+    if (!columnCount || !imageData.length) {
+      return [] as GalleryImage[][];
+    }
 
     // Create array of column heights
     const columnHeights = Array(columnCount).fill(0);
     // Create array of columns with images
     const columns: GalleryImage[][] = Array.from(
       { length: columnCount },
-      () => []
+      () => [],
     );
 
     // Place each image in the shortest column
     imageData.forEach((image) => {
       const shortestColumnIndex = columnHeights.indexOf(
-        Math.min(...columnHeights)
+        Math.min(...columnHeights),
       );
       columns[shortestColumnIndex].push(image);
 
@@ -165,14 +175,16 @@ function RouteComponent() {
       if (deletedImageId) {
         // Update the query cache for an immediate UI update
         queryClient.setQueryData<GalleryQueryData>(['gallery'], (oldData) => {
-          if (!oldData || !oldData.pages) return oldData;
+          if (!oldData || !oldData.pages) {
+            return oldData;
+          }
 
           return {
             ...oldData,
             pages: oldData.pages.map((page) => ({
               ...page,
               images: page.images.filter(
-                (img: GalleryImage) => img._id !== deletedImageId
+                (img: GalleryImage) => img._id !== deletedImageId,
               ),
             })),
           };
@@ -182,7 +194,7 @@ function RouteComponent() {
       setSelectedImage(null);
       refetch();
     },
-    [queryClient, refetch]
+    [queryClient, refetch],
   );
 
   const toggleMultiSelectMode = () => {
@@ -194,7 +206,7 @@ function RouteComponent() {
 
   const toggleImageSelection = (
     imageId: string,
-    event: React.MouseEvent | MouseEvent
+    event: React.MouseEvent | MouseEvent,
   ) => {
     if (event) {
       event.stopPropagation();
@@ -242,14 +254,16 @@ function RouteComponent() {
     onSuccess: (data) => {
       // Update cache to remove deleted images
       queryClient.setQueryData<GalleryQueryData>(['gallery'], (oldData) => {
-        if (!oldData || !oldData.pages) return oldData;
+        if (!oldData || !oldData.pages) {
+          return oldData;
+        }
 
         return {
           ...oldData,
           pages: oldData.pages.map((page) => ({
             ...page,
             images: page.images.filter(
-              (img: GalleryImage) => !selectedImageIds.includes(img._id)
+              (img: GalleryImage) => !selectedImageIds.includes(img._id),
             ),
           })),
         };

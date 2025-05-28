@@ -28,5 +28,5 @@ export default cva(
       variant: 'default',
       size: 'default',
     },
-  }
+  },
 );

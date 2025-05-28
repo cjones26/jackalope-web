@@ -6,35 +6,37 @@ import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import unusedImports from 'eslint-plugin-unused-imports';
 import pluginQuery from '@tanstack/eslint-plugin-query';
 import tseslint from 'typescript-eslint';
+import prettier from 'eslint-plugin-prettier';
+import prettierConfig from 'eslint-config-prettier';
 
-export default tseslint.config(
-  { ignores: ['dist'] },
-  {
-    extends: [
-      js.configs.recommended,
-      ...tseslint.configs.recommended,
-      ...pluginQuery.configs['flat/recommended'],
+export default tseslint.config({ ignores: ['dist'] }, prettierConfig, {
+  extends: [
+    js.configs.recommended,
+    ...tseslint.configs.recommended,
+    ...pluginQuery.configs['flat/recommended'],
+  ],
+  files: ['**/*.{ts,tsx}'],
+  languageOptions: {
+    ecmaVersion: 2020,
+    globals: globals.browser,
+  },
+  plugins: {
+    'react-hooks': reactHooks,
+    'react-refresh': reactRefresh,
+    'simple-import-sort': simpleImportSort,
+    'unused-imports': unusedImports,
+    prettier: prettier,
+  },
+  rules: {
+    ...reactHooks.configs.recommended.rules,
+    'react-refresh/only-export-components': [
+      'warn',
+      { allowConstantExport: true },
     ],
-    files: ['**/*.{ts,tsx}'],
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
-    },
-    plugins: {
-      'react-hooks': reactHooks,
-      'react-refresh': reactRefresh,
-      'simple-import-sort': simpleImportSort,
-      'unused-imports': unusedImports,
-    },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-      'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
-      ],
-      'simple-import-sort/imports': 'error',
-      'simple-import-sort/exports': 'error',
-      'unused-imports/no-unused-imports': 'error',
-    },
-  }
-);
+    'simple-import-sort/imports': 'error',
+    'simple-import-sort/exports': 'error',
+    'unused-imports/no-unused-imports': 'error',
+    'prettier/prettier': 'error',
+    curly: 'error',
+  },
+});

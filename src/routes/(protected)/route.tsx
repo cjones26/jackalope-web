@@ -11,9 +11,10 @@ import DefaultAvatar from '@/assets/default-avatar.jpg';
 import Icon from '@/assets/icon.png';
 import IconDark from '@/assets/icon-dark.png';
 import Footer from '@/shared/components/Footer';
+import { useSupabase } from '@/shared/context/supabase';
 import { useTheme } from '@/shared/context/theme';
-import { useApi } from '@/shared/hooks/useApi';
 import useSignOut from '@/shared/hooks/useSignOut';
+import { supabase } from '@/shared/services/supabase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/Avatar';
 import { Button } from '@/shared/ui/Button';
 import {
@@ -35,13 +36,29 @@ export const Route = createFileRoute('/(protected)')({
 
 function RouteComponent() {
   const { colorScheme } = useTheme();
-  const { fetchWithAuth } = useApi();
+  const { user } = useSupabase();
   const signOut = useSignOut();
 
-  // Fetch user profile data
+  // Fetch user profile data directly from Supabase
   const { data: profile } = useQuery({
-    queryKey: ['profile'],
-    queryFn: () => fetchWithAuth('/profile'),
+    queryKey: ['user', user?.id],
+    queryFn: async () => {
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('first_name, last_name, avatar_url')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+      return data;
+    },
+    enabled: !!user?.id,
   });
 
   // Generate avatar initials from profile data if available
@@ -51,6 +68,19 @@ function RouteComponent() {
     }
     return null;
   };
+
+  console.log('Initials:', getInitials());
+  // Debug logs for profile data and avatar conditions
+  console.log('Profile data:', profile);
+  console.log('Avatar conditions:', {
+    hasFirstName: Boolean(profile?.first_name),
+    hasLastName: Boolean(profile?.last_name),
+    hasNoAvatar: !profile?.avatar_url,
+    showFallback:
+      Boolean(profile?.first_name) &&
+      Boolean(profile?.last_name) &&
+      !profile?.avatar_url,
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -84,16 +114,12 @@ function RouteComponent() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="p-2 ml-2">
                   <Avatar className="h-8 w-8">
-                    {profile?.profile_image ? (
-                      <AvatarImage src={profile.profile_image} alt="Profile" />
+                    {profile?.avatar_url ? (
+                      <AvatarImage src={profile.avatar_url} alt="Profile" />
                     ) : (
                       <AvatarImage src={DefaultAvatar} alt="Default Profile" />
                     )}
-                    {profile?.first_name &&
-                      profile?.last_name &&
-                      !profile?.profile_image && (
-                        <AvatarFallback>{getInitials()}</AvatarFallback>
-                      )}
+                    <AvatarFallback>{getInitials()}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>

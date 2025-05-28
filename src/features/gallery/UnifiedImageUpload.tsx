@@ -36,11 +36,11 @@ const imageWithMetadataSchema = z.object({
     })
     .refine(
       (file) => file.size <= MAX_FILE_SIZE,
-      'File size must be less than 10MB'
+      'File size must be less than 10MB',
     )
     .refine(
       (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
-      'Only .jpg, .jpeg, .png, .webp, and .gif files are accepted'
+      'Only .jpg, .jpeg, .png, .webp, and .gif files are accepted',
     ),
   title: z.string().optional(),
   description: z.string().optional(),
@@ -65,7 +65,7 @@ interface UnifiedImageUploadProps {
 
 export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState<number | null>(
-    null
+    null,
   );
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -103,7 +103,9 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
 
   // Handle file selection
   const handleFilesSelected = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      return;
+    }
 
     const filesArray = Array.from(files);
     const currentCount = fields.length;
@@ -308,7 +310,7 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                   ? 'border-primary bg-primary/10'
                   : fields.length > 0
                     ? 'border-primary/50 bg-primary/5'
-                    : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5'
+                    : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5',
               )}
             >
               <input
@@ -369,7 +371,7 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                           currentImageIndex === index
                             ? 'bg-primary/10'
                             : 'bg-muted/40',
-                          'hover:bg-primary/5 cursor-pointer'
+                          'hover:bg-primary/5 cursor-pointer',
                         )}
                         onClick={() => setCurrentImageIndex(index)}
                       >
@@ -450,7 +452,7 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                   <div className="relative w-full h-[200px] overflow-hidden rounded-md bg-muted flex items-center justify-center">
                     <img
                       src={getPreviewUrl(
-                        form.getValues(`images.${currentImageIndex}.file`)
+                        form.getValues(`images.${currentImageIndex}.file`),
                       )}
                       alt={`Preview ${currentImageIndex}`}
                       className="max-w-full max-h-[200px] object-contain"
