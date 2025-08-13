@@ -82,35 +82,19 @@ function RouteComponent() {
 
   const columnCount = getColumnCount();
 
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    refetch,
-  } = useInfiniteQuery<GalleryResponse, ApiError>({
-    queryKey: ['gallery'],
-    queryFn: ({ pageParam = 1 }) =>
-      fetchWithAuth(`/gallery?page=${pageParam}&limit=20`),
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.currentPage + 1 : undefined,
-    initialPageParam: 1,
-  });
+  // Temporarily disable gallery API calls - no backend implementation yet
+  const data = undefined;
+  const isLoading = false;
+  const isError = false;
+  const error = null;
+  const fetchNextPage = () => {};
+  const hasNextPage = false;
+  const isFetchingNextPage = false;
+  const refetch = () => {};
 
-  const { data: profileData, isLoading: isProfileLoading } = useQuery<
-    Profile,
-    ApiError
-  >({
-    queryKey: ['user'],
-    queryFn: () => fetchWithAuth('/profile'),
-    // Don't throw errors for 404 (no profile yet)
-    retry: (failureCount: number, error: ApiError) => {
-      return error.status !== 404 && failureCount < 3;
-    },
-  });
+  // Temporarily disable profile API calls
+  const profileData = undefined;
+  const isProfileLoading = false;
 
   // Flatten all images from all pages into a single array
   const imageData = useMemo(

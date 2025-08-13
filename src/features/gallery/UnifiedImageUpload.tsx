@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Trash2, Upload, X } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import { z } from 'zod';
 
 import {
@@ -11,7 +12,8 @@ import {
   MAX_FILE_SIZE,
   MAX_FILES,
 } from '@/shared/constants/FileConstants';
-import { useApi } from '@/shared/hooks/useApi';
+import { useSupabase } from '@/shared/context/supabase';
+import { ResumableUploader } from '@/shared/services/ResumableUploader';
 import { Button } from '@/shared/ui/Button';
 import {
   Card,
@@ -71,7 +73,7 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrlsRef = useRef<Map<string, string>>(new Map());
-  const { fetchWithAuth } = useApi();
+  const { session } = useSupabase();
 
   const form = useForm<UploadFormData>({
     resolver: zodResolver(uploadFormSchema),
@@ -214,54 +216,55 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
     mutationFn: async (data: UploadFormData) => {
       const responses = [];
 
-      // Set up a progress simulation
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 95) {
-            clearInterval(progressInterval);
-            return prev;
-          }
-          return prev + 5;
-        });
-      }, 300);
+      // Initialize progress tracking
+      const totalImages = data.images.length;
 
-      try {
-        // Upload each image
-        for (const image of data.images) {
-          const formData = new FormData();
-          formData.append('images', image.file);
+      if (!session?.access_token) {
+        throw new Error('Authentication required');
+      }
 
-          if (image.title) {
-            formData.append('title', image.title);
-          }
+      for (let index = 0; index < data.images.length; index++) {
+        const image = data.images[index];
+        const baseProgress = (index / totalImages) * 100;
+        const imageProgressWeight = 100 / totalImages;
 
-          if (image.description) {
-            formData.append('description', image.description);
-          }
+        try {
+          const uploader = new ResumableUploader(
+            import.meta.env.VITE_API_URL,
+            session.access_token,
+            // Use default chunk size (10MB) which ensures S3 multipart compatibility
+          );
 
-          if (image.tags && image.tags.length > 0) {
-            formData.append('tags', JSON.stringify(image.tags));
-          }
-
-          const response = await fetchWithAuth('/gallery', {
-            method: 'POST',
-            body: formData,
+          const result = await uploader.uploadFile(image.file, (progress) => {
+            const currentImageProgress = (progress / 100) * imageProgressWeight;
+            const overallProgress = baseProgress + currentImageProgress;
+            setUploadProgress(Math.min(overallProgress, 95));
           });
 
-          responses.push(response);
+          if (!result.success) {
+            console.error('Upload failed:', result.error);
+            throw new Error(result.error || 'Upload failed');
+          }
+
+          // Upload completed successfully - no gallery creation needed yet
+          responses.push({ success: true, uploadId: result.uploadId });
+        } catch (error) {
+          console.error(`Failed to upload image ${index + 1}:`, error);
+          throw error;
         }
-
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-
-        return responses;
-      } catch (error) {
-        clearInterval(progressInterval);
-        throw error;
       }
+
+      setUploadProgress(100);
+      return responses;
     },
-    onSuccess: () => {
+    onSuccess: (responses) => {
       resetForm();
+
+      const imageCount = responses.length;
+      toast.success('Upload Complete!', {
+        description: `Successfully uploaded ${imageCount} ${imageCount === 1 ? 'image' : 'images'}`,
+      });
+
       onSuccess();
     },
   });
@@ -330,6 +333,9 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                   <p className="text-xs text-muted-foreground">
                     Up to {MAX_FILES} images, max 10MB each
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Smart upload: chunked for large files (&gt;10MB)
+                  </p>
                 </div>
               </div>
             </div>
@@ -387,9 +393,11 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                             <span className="text-sm truncate max-w-[120px]">
                               {image.title || image.file.name}
                             </span>
-                            <span className="text-xs text-muted-foreground">
-                              {(image.file.size / 1024 / 1024).toFixed(1)}MB
-                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">
+                                {(image.file.size / 1024 / 1024).toFixed(1)}MB
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <Button
