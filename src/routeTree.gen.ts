@@ -14,7 +14,6 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as publicRouteImport } from './routes/(public)/route'
 import { Route as protectedRouteImport } from './routes/(protected)/route'
 import { Route as IndexImport } from './routes/index'
-import { Route as publicAboutImport } from './routes/(public)/about'
 import { Route as protectedProfileImport } from './routes/(protected)/profile'
 import { Route as protectedGalleryImport } from './routes/(protected)/gallery'
 import { Route as publicauthSignUpImport } from './routes/(public)/(auth)/sign-up'
@@ -37,12 +36,6 @@ const IndexRoute = IndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRoute,
-} as any)
-
-const publicAboutRoute = publicAboutImport.update({
-  id: '/about',
-  path: '/about',
-  getParentRoute: () => publicRouteRoute,
 } as any)
 
 const protectedProfileRoute = protectedProfileImport.update({
@@ -114,13 +107,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof protectedProfileImport
       parentRoute: typeof protectedRouteImport
     }
-    '/(public)/about': {
-      id: '/(public)/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof publicAboutImport
-      parentRoute: typeof publicRouteImport
-    }
     '/(public)/(auth)/check-email': {
       id: '/(public)/(auth)/check-email'
       path: '/check-email'
@@ -162,14 +148,12 @@ const protectedRouteRouteWithChildren = protectedRouteRoute._addFileChildren(
 )
 
 interface publicRouteRouteChildren {
-  publicAboutRoute: typeof publicAboutRoute
   publicauthCheckEmailRoute: typeof publicauthCheckEmailRoute
   publicauthSignInRoute: typeof publicauthSignInRoute
   publicauthSignUpRoute: typeof publicauthSignUpRoute
 }
 
 const publicRouteRouteChildren: publicRouteRouteChildren = {
-  publicAboutRoute: publicAboutRoute,
   publicauthCheckEmailRoute: publicauthCheckEmailRoute,
   publicauthSignInRoute: publicauthSignInRoute,
   publicauthSignUpRoute: publicauthSignUpRoute,
@@ -183,7 +167,6 @@ export interface FileRoutesByFullPath {
   '/': typeof publicRouteRouteWithChildren
   '/gallery': typeof protectedGalleryRoute
   '/profile': typeof protectedProfileRoute
-  '/about': typeof publicAboutRoute
   '/check-email': typeof publicauthCheckEmailRoute
   '/sign-in': typeof publicauthSignInRoute
   '/sign-up': typeof publicauthSignUpRoute
@@ -193,7 +176,6 @@ export interface FileRoutesByTo {
   '/': typeof publicRouteRouteWithChildren
   '/gallery': typeof protectedGalleryRoute
   '/profile': typeof protectedProfileRoute
-  '/about': typeof publicAboutRoute
   '/check-email': typeof publicauthCheckEmailRoute
   '/sign-in': typeof publicauthSignInRoute
   '/sign-up': typeof publicauthSignUpRoute
@@ -206,7 +188,6 @@ export interface FileRoutesById {
   '/(public)': typeof publicRouteRouteWithChildren
   '/(protected)/gallery': typeof protectedGalleryRoute
   '/(protected)/profile': typeof protectedProfileRoute
-  '/(public)/about': typeof publicAboutRoute
   '/(public)/(auth)/check-email': typeof publicauthCheckEmailRoute
   '/(public)/(auth)/sign-in': typeof publicauthSignInRoute
   '/(public)/(auth)/sign-up': typeof publicauthSignUpRoute
@@ -218,19 +199,11 @@ export interface FileRouteTypes {
     | '/'
     | '/gallery'
     | '/profile'
-    | '/about'
     | '/check-email'
     | '/sign-in'
     | '/sign-up'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/gallery'
-    | '/profile'
-    | '/about'
-    | '/check-email'
-    | '/sign-in'
-    | '/sign-up'
+  to: '/' | '/gallery' | '/profile' | '/check-email' | '/sign-in' | '/sign-up'
   id:
     | '__root__'
     | '/'
@@ -238,7 +211,6 @@ export interface FileRouteTypes {
     | '/(public)'
     | '/(protected)/gallery'
     | '/(protected)/profile'
-    | '/(public)/about'
     | '/(public)/(auth)/check-email'
     | '/(public)/(auth)/sign-in'
     | '/(public)/(auth)/sign-up'
@@ -285,7 +257,6 @@ export const routeTree = rootRoute
     "/(public)": {
       "filePath": "(public)/route.tsx",
       "children": [
-        "/(public)/about",
         "/(public)/(auth)/check-email",
         "/(public)/(auth)/sign-in",
         "/(public)/(auth)/sign-up"
@@ -298,10 +269,6 @@ export const routeTree = rootRoute
     "/(protected)/profile": {
       "filePath": "(protected)/profile.tsx",
       "parent": "/(protected)"
-    },
-    "/(public)/about": {
-      "filePath": "(public)/about.tsx",
-      "parent": "/(public)"
     },
     "/(public)/(auth)/check-email": {
       "filePath": "(public)/(auth)/check-email.tsx",

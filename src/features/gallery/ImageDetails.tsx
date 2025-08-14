@@ -1,5 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
+
+import { SecureImage } from './SecureImage';
 import {
   AlertCircle,
   ChevronLeft,
@@ -168,8 +170,12 @@ export function ImageDetails({
   // Delete image mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      return fetchWithAuth(`/gallery/${currentImage._id}`, {
+      return fetchWithAuth('/api/v1/folders/files', {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fileIds: [currentImage._id] }),
       });
     },
     onSuccess: () => {
@@ -256,10 +262,11 @@ export function ImageDetails({
 
             {/* Image with max dimensions to maintain aspect ratio */}
             <div className="relative w-full h-full flex items-center justify-center">
-              <img
-                src={currentImage.url}
+              <SecureImage
+                uploadId={currentImage._id}
                 alt={currentImage.title || 'Gallery image'}
                 className="max-h-full max-w-full object-contain"
+                thumbnail={false} // Full size image in details view
               />
 
               {/* Navigation indicator */}
@@ -411,7 +418,7 @@ export function ImageDetails({
                       <h4 className="text-sm font-medium text-muted-foreground">
                         Format
                       </h4>
-                      <p>{currentImage.format.toUpperCase()}</p>
+                      <p>{currentImage.format?.toUpperCase() || 'Unknown'}</p>
                     </div>
                     <div>
                       <h4 className="text-sm font-medium text-muted-foreground">

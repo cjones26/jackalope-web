@@ -1,20 +1,23 @@
 import { useWindowSize } from '@react-hook/window-size';
 import {
-  InfiniteData,
-  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
+  useInfiniteQuery,
 } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
-import { Plus, Trash, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { FolderPlus, Plus, Trash, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AddImageDialog } from '@/features/gallery/AddImageDialog';
+import { CreateFolderDialog } from '@/features/gallery/CreateFolderDialog';
+import { FolderBreadcrumbs } from '@/features/gallery/FolderBreadcrumbs';
+import { FolderGrid } from '@/features/gallery/FolderGrid';
 import { ImageDetails } from '@/features/gallery/ImageDetails';
+import { VirtualizedInfiniteGallery } from '@/features/gallery/VirtualizedInfiniteGallery';
 import { GalleryImage } from '@/features/gallery/types/GalleryImage';
-import { GalleryResponse } from '@/features/gallery/types/GalleryResponse';
+import { BreadcrumbItem, FolderContentsResponse } from '@/features/gallery/types/Folder';
 import { Profile } from '@/shared/context/api/types/Profile';
 import { ApiError, useApi } from '@/shared/hooks/useApi';
 import {
@@ -28,15 +31,15 @@ import {
   AlertDialogTitle,
 } from '@/shared/ui/AlertDialog';
 import { Button } from '@/shared/ui/Button';
-import { Checkbox } from '@/shared/ui/Checkbox';
 import { Spinner } from '@/shared/ui/Spinner';
 import { H3 } from '@/shared/ui/typography';
 
 export const Route = createFileRoute('/(protected)/gallery')({
   component: RouteComponent,
+  validateSearch: (search: Record<string, unknown>) => ({
+    folderId: (search.folderId as string) || null,
+  }),
 });
-
-type GalleryQueryData = InfiniteData<GalleryResponse>;
 
 interface DeleteResponse {
   deletedCount: number;
@@ -54,17 +57,20 @@ const BREAKPOINTS = {
 
 function RouteComponent() {
   const { fetchWithAuth } = useApi();
+  const navigate = useNavigate();
+  const { folderId: currentFolderId } = Route.useSearch();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
   const [width] = useWindowSize();
 
-  // Determine column count based on screen width
-  const getColumnCount = () => {
+  // Calculate responsive column count based on window width
+  const getColumnCount = (): number => {
     if (width < BREAKPOINTS.md) {
       return 1;
     }
@@ -82,103 +88,165 @@ function RouteComponent() {
 
   const columnCount = getColumnCount();
 
-  // Temporarily disable gallery API calls - no backend implementation yet
-  const data = undefined;
-  const isLoading = false;
-  const isError = false;
-  const error = null;
-  const fetchNextPage = () => {};
-  const hasNextPage = false;
-  const isFetchingNextPage = false;
-  const refetch = () => {};
+  const [itemsPerPage] = useState(50); // Good balance for performance
 
-  // Temporarily disable profile API calls
-  const profileData = undefined;
-  const isProfileLoading = false;
+  // Fetch folder contents with infinite scrolling
+  const {
+    data: infiniteData,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<FolderContentsResponse, ApiError>({
+    queryKey: ['folder-contents-infinite', currentFolderId, itemsPerPage],
+    queryFn: async ({ pageParam = 1 }) => {
+      const endpoint = currentFolderId 
+        ? `/api/v1/folders/${currentFolderId}/contents` 
+        : '/api/v1/folders/root/contents';
+      
+      const params = new URLSearchParams({
+        page: (pageParam as number).toString(),
+        limit: itemsPerPage.toString(),
+      });
+      
+      return fetchWithAuth(`${endpoint}?${params}`);
+    },
+    getNextPageParam: (lastPage) => {
+      if (lastPage.pagination?.has_next) {
+        return lastPage.pagination.page + 1;
+      }
+      return undefined;
+    },
+    initialPageParam: 1,
+  });
 
-  // Flatten all images from all pages into a single array
-  const imageData = useMemo(
-    () => data?.pages.flatMap((page) => page.images) || [],
-    [data],
-  );
-
-  // Calculate grid of images for proper masonry layout
-  const gridLayout = useMemo(() => {
-    if (!columnCount || !imageData.length) {
-      return [] as GalleryImage[][];
-    }
-
-    // Create array of column heights
-    const columnHeights = Array(columnCount).fill(0);
-    // Create array of columns with images
-    const columns: GalleryImage[][] = Array.from(
-      { length: columnCount },
-      () => [],
-    );
-
-    // Place each image in the shortest column
-    imageData.forEach((image) => {
-      const shortestColumnIndex = columnHeights.indexOf(
-        Math.min(...columnHeights),
-      );
-      columns[shortestColumnIndex].push(image);
-
-      // Update the column height (approximate based on aspect ratio)
-      const aspectRatio = image.width / image.height || 1;
-      // Assuming a standard column width, calculate the height this image would add
-      const imageHeight = 100 / columnCount / aspectRatio;
-      columnHeights[shortestColumnIndex] += imageHeight;
+  // Flatten infinite data into single arrays
+  const folderContents = useMemo(() => {
+    if (!infiniteData) return null;
+    
+    const allFolders: any[] = [];
+    const allFiles: any[] = [];
+    
+    infiniteData.pages.forEach(page => {
+      allFolders.push(...(page.folders || []));
+      allFiles.push(...(page.files || []));
     });
 
-    return columns;
-  }, [imageData, columnCount]);
-
-  // Handle infinite scroll loading
-  useEffect(() => {
-    const handleScroll = () => {
-      if (
-        !isFetchingNextPage &&
-        hasNextPage &&
-        window.innerHeight + window.scrollY >= document.body.offsetHeight - 800
-      ) {
-        fetchNextPage();
-      }
+    return {
+      folders: allFolders,
+      files: allFiles,
+      pagination: infiniteData.pages[infiniteData.pages.length - 1]?.pagination,
+      total_items: infiniteData.pages[0]?.pagination?.total_items || 0,
     };
+  }, [infiniteData]);
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  // Fetch profile data
+  const { data: profileData, isLoading: isProfileLoading } = useQuery<Profile, ApiError>({
+    queryKey: ['profile'],
+    queryFn: () => fetchWithAuth('/api/v1/profile'),
+  });
+
+  // Fetch breadcrumb chain for current folder
+  const { data: breadcrumbData } = useQuery<BreadcrumbItem[], ApiError>({
+    queryKey: ['folder-breadcrumbs', currentFolderId],
+    queryFn: async () => {
+      if (!currentFolderId) return [];
+      
+      const breadcrumbs: BreadcrumbItem[] = [];
+      let folderId = currentFolderId;
+      
+      // Walk up the parent chain to build breadcrumbs
+      while (folderId) {
+        const folder = await fetchWithAuth(`/api/v1/folders/${folderId}`);
+        breadcrumbs.unshift({
+          id: folder.folder.id,
+          name: folder.folder.name,
+          path: folder.folder.path || folder.folder.name,
+        });
+        folderId = folder.folder.parent_id;
+      }
+      
+      return breadcrumbs;
+    },
+    enabled: !!currentFolderId,
+  });
+
+  // Update breadcrumbs when data changes
+  useEffect(() => {
+    setBreadcrumbs(breadcrumbData || []);
+  }, [breadcrumbData]);
+
+  // Get images and folders from current folder
+  const imageData = useMemo(
+    () => folderContents?.files || [],
+    [folderContents],
+  );
+  
+  const folderData = useMemo(
+    () => folderContents?.folders || [],
+    [folderContents],
+  );
+
+
+  // Handle folder navigation
+  const handleFolderClick = (folderId: string) => {
+    navigate({
+      to: '/gallery',
+      search: { folderId },
+    });
+  };
+
+  const handleNavigateTo = (folderId: string | null) => {
+    navigate({
+      to: '/gallery',
+      search: folderId ? { folderId } : {},
+    });
+  };
+
+  const handleCreateFolder = () => {
+    // Invalidate infinite query to refetch data
+    queryClient.invalidateQueries({ queryKey: ['folder-contents-infinite', currentFolderId] });
+    setIsCreateFolderOpen(false);
+  };
+
 
   const handleImageAdded = useCallback(() => {
-    refetch();
+    // Invalidate signed URL cache to ensure fresh URLs for newly uploaded files
+    queryClient.invalidateQueries({ queryKey: ['signed-url'] });
+    queryClient.invalidateQueries({ queryKey: ['bulk-signed-urls'] });
+    // Invalidate infinite query to refetch data
+    queryClient.invalidateQueries({ queryKey: ['folder-contents-infinite', currentFolderId] });
     setIsAddDialogOpen(false);
-  }, [refetch]);
+  }, [queryClient, currentFolderId]);
 
   const handleImageUpdated = useCallback(
     (deletedImageId: string | undefined) => {
       if (deletedImageId) {
         // Update the query cache for an immediate UI update
-        queryClient.setQueryData<GalleryQueryData>(['gallery'], (oldData) => {
-          if (!oldData || !oldData.pages) {
+        queryClient.setQueryData<FolderContentsResponse>(['folder-contents', currentFolderId], (oldData) => {
+          if (!oldData) {
             return oldData;
           }
 
           return {
             ...oldData,
-            pages: oldData.pages.map((page) => ({
-              ...page,
-              images: page.images.filter(
-                (img: GalleryImage) => img._id !== deletedImageId,
-              ),
-            })),
+            files: oldData.files.filter(
+              (img: GalleryImage) => img._id !== deletedImageId,
+            ),
           };
         });
       }
 
       setSelectedImage(null);
-      refetch();
+      // Invalidate signed URL cache when images are updated/deleted
+      queryClient.invalidateQueries({ queryKey: ['signed-url'] });
+      queryClient.invalidateQueries({ queryKey: ['bulk-signed-urls'] });
+      // Invalidate infinite query to refetch data
+      queryClient.invalidateQueries({ queryKey: ['folder-contents-infinite', currentFolderId] });
     },
-    [queryClient, refetch],
+    [queryClient, currentFolderId],
   );
 
   const toggleMultiSelectMode = () => {
@@ -220,36 +288,33 @@ function RouteComponent() {
     setSelectedImageIds([]);
   };
 
-  // Delete multiple images mutation
+  // Delete multiple files mutation
   const deleteMultipleMutation = useMutation<
     DeleteResponse,
     ApiError,
     string[]
   >({
-    mutationFn: async (imageIds: string[]) => {
-      return fetchWithAuth('/gallery', {
+    mutationFn: async (fileIds: string[]) => {
+      return fetchWithAuth('/api/v1/folders/files', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ imageIds }),
+        body: JSON.stringify({ fileIds }),
       });
     },
     onSuccess: (data) => {
       // Update cache to remove deleted images
-      queryClient.setQueryData<GalleryQueryData>(['gallery'], (oldData) => {
-        if (!oldData || !oldData.pages) {
+      queryClient.setQueryData<FolderContentsResponse>(['folder-contents', currentFolderId], (oldData) => {
+        if (!oldData) {
           return oldData;
         }
 
         return {
           ...oldData,
-          pages: oldData.pages.map((page) => ({
-            ...page,
-            images: page.images.filter(
-              (img: GalleryImage) => !selectedImageIds.includes(img._id),
-            ),
-          })),
+          files: oldData.files.filter(
+            (img: GalleryImage) => !selectedImageIds.includes(img._id),
+          ),
         };
       });
 
@@ -261,7 +326,11 @@ function RouteComponent() {
         description: `Successfully deleted ${data.deletedCount} images`,
       });
 
-      refetch();
+      // Invalidate signed URL cache for deleted images
+      queryClient.invalidateQueries({ queryKey: ['signed-url'] });
+      queryClient.invalidateQueries({ queryKey: ['bulk-signed-urls'] });
+      // Invalidate infinite query to refetch data
+      queryClient.invalidateQueries({ queryKey: ['folder-contents-infinite', currentFolderId] });
     },
     onError: () => {
       toast.error('Error', {
@@ -299,43 +368,71 @@ function RouteComponent() {
   }
 
   // For all errors, including 404, we'll show the empty state with upload option
-  if (isError || imageData.length === 0) {
+  if (isError || (imageData.length === 0 && folderData.length === 0)) {
     return (
       <div className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto">
+        {/* Breadcrumb navigation */}
+        {breadcrumbs.length > 0 && (
+          <FolderBreadcrumbs 
+            breadcrumbs={breadcrumbs} 
+            onNavigate={handleNavigateTo} 
+          />
+        )}
+        
         <div className="flex justify-between items-center">
           <H3>{getGalleryTitle()}</H3>
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add Image(s)
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsCreateFolderOpen(true)}>
+              <FolderPlus className="h-4 w-4" />
+              New Folder
+            </Button>
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Image(s)
+            </Button>
+          </div>
         </div>
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <p className="text-muted-foreground mb-4">
             {(() => {
               if (isError && error?.status === 404) {
-                return 'Your gallery is empty. Upload your first image to get started.';
+                return currentFolderId ? 'This folder is empty.' : 'Your gallery is empty. Create folders or upload images to get started.';
               }
               if (isError) {
                 return `There was an error: ${error?.statusText || 'Unknown error'}`;
               }
-              return 'Your gallery is empty. Upload your first image to get started.';
+              return currentFolderId ? 'This folder is empty.' : 'Your gallery is empty. Create folders or upload images to get started.';
             })()}
           </p>
         </div>
+        
         <AddImageDialog
           open={isAddDialogOpen}
           onClose={() => setIsAddDialogOpen(false)}
           onSuccess={handleImageAdded}
+          folderId={currentFolderId}
+        />
+        
+        <CreateFolderDialog
+          open={isCreateFolderOpen}
+          onClose={() => setIsCreateFolderOpen(false)}
+          onSuccess={handleCreateFolder}
+          parentId={currentFolderId}
         />
       </div>
     );
   }
 
   return (
-    <div
-      className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto"
-      ref={containerRef}
-    >
+    <div className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto">
+      {/* Breadcrumb navigation */}
+      {breadcrumbs.length > 0 && (
+        <FolderBreadcrumbs 
+          breadcrumbs={breadcrumbs} 
+          onNavigate={handleNavigateTo} 
+        />
+      )}
+      
       {/* Header */}
       <div className="w-full mb-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-0">
@@ -377,10 +474,13 @@ function RouteComponent() {
               </>
             ) : (
               <>
-                <Button variant="outline" onClick={toggleMultiSelectMode}>
+                <Button variant="outline" onClick={toggleMultiSelectMode} disabled={imageData.length === 0}>
                   Select Multiple
                 </Button>
-
+                <Button variant="outline" onClick={() => setIsCreateFolderOpen(true)}>
+                  <FolderPlus className="h-4 w-4" />
+                  New Folder
+                </Button>
                 <Button onClick={() => setIsAddDialogOpen(true)}>
                   <Plus className="h-4 w-4" />
                   Add Image(s)
@@ -391,67 +491,43 @@ function RouteComponent() {
         </div>
       </div>
 
-      {/* Gallery Grid - CSS Grid for Masonry Layout */}
-      <div
-        className="w-full grid gap-4"
-        style={{
-          gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
-        }}
-      >
-        {gridLayout.map((column, colIndex) => (
-          <div key={`column-${colIndex}`} className="flex flex-col gap-4">
-            {column.map((image) => {
-              const isSelected = selectedImageIds.includes(image._id);
-              const aspectRatio = image.width / image.height || 1;
+      {/* Folders */}
+      <FolderGrid 
+        folders={folderData}
+        onFolderClick={handleFolderClick}
+        // TODO: Add folder management functionality
+        // onFolderRename={handleFolderRename}
+        // onFolderDelete={handleFolderDelete}
+        // onFolderMove={handleFolderMove}
+      />
 
-              return (
-                <div
-                  key={image._id}
-                  className={`relative overflow-hidden rounded-md shadow-md cursor-pointer hover:shadow-lg transition-shadow ${
-                    isSelected ? 'ring-2 ring-primary' : ''
-                  }`}
-                  style={{ aspectRatio: `${aspectRatio}` }}
-                  onClick={(e) => handleImageClick(image, e)}
-                >
-                  <img
-                    src={image.url}
-                    alt={image.title || 'Gallery image'}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  {isMultiSelectMode && (
-                    <div
-                      className="absolute top-2 right-2 bg-background rounded-md flex items-center justify-center w-6 h-6"
-                      onClick={(e) => toggleImageSelection(image._id, e)}
-                    >
-                      <Checkbox
-                        checked={isSelected}
-                        className="data-[state=checked]:bg-primary"
-                      />
-                    </div>
-                  )}
-                  {image.title && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-sm truncate">
-                      {image.title}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-
-      {isFetchingNextPage && (
-        <div className="flex justify-center my-4">
-          <Spinner />
-        </div>
+      {/* Virtualized Infinite Gallery */}
+      {imageData.length > 0 && (
+        <VirtualizedInfiniteGallery
+          images={imageData}
+          columnCount={columnCount}
+          isMultiSelectMode={isMultiSelectMode}
+          selectedImageIds={selectedImageIds}
+          onImageClick={handleImageClick}
+          onImageSelect={toggleImageSelection}
+          onLoadMore={() => fetchNextPage()}
+          hasNextPage={hasNextPage || false}
+          isFetchingNextPage={isFetchingNextPage}
+        />
       )}
 
       <AddImageDialog
         open={isAddDialogOpen}
         onClose={() => setIsAddDialogOpen(false)}
         onSuccess={handleImageAdded}
+        folderId={currentFolderId}
+      />
+      
+      <CreateFolderDialog
+        open={isCreateFolderOpen}
+        onClose={() => setIsCreateFolderOpen(false)}
+        onSuccess={handleCreateFolder}
+        parentId={currentFolderId}
       />
 
       {selectedImage && (

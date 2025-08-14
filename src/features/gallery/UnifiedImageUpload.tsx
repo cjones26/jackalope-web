@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Trash2, Upload, X } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { Plus, Trash2, Upload, X } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
@@ -9,8 +10,6 @@ import { z } from 'zod';
 
 import {
   ACCEPTED_IMAGE_TYPES,
-  MAX_FILE_SIZE,
-  MAX_FILES,
 } from '@/shared/constants/FileConstants';
 import { useSupabase } from '@/shared/context/supabase';
 import { ResumableUploader } from '@/shared/services/ResumableUploader';
@@ -37,12 +36,8 @@ const imageWithMetadataSchema = z.object({
       message: 'Invalid file',
     })
     .refine(
-      (file) => file.size <= MAX_FILE_SIZE,
-      'File size must be less than 10MB',
-    )
-    .refine(
       (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
-      'Only .jpg, .jpeg, .png, .webp, and .gif files are accepted',
+      'Only image files are currently supported. More file types coming soon!',
     ),
   title: z.string().optional(),
   description: z.string().optional(),
@@ -53,22 +48,106 @@ const imageWithMetadataSchema = z.object({
 const uploadFormSchema = z.object({
   images: z
     .array(imageWithMetadataSchema)
-    .min(1, { message: 'Please select at least one image' })
-    .max(MAX_FILES, {
-      message: `You can only upload up to ${MAX_FILES} images at once`,
-    }),
+    .min(1, { message: 'Please select at least one image' }),
+    // No max limit - Google Drive style unlimited uploads
 });
 
 type UploadFormData = z.infer<typeof uploadFormSchema>;
 
 interface UnifiedImageUploadProps {
   onSuccess: () => void;
+  folderId?: string | null;
 }
 
-export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
-  const [currentImageIndex, setCurrentImageIndex] = useState<number | null>(
-    null,
+// Virtualized file list component for handling large uploads efficiently
+interface VirtualizedFileListProps {
+  fields: any[];
+  form: any;
+  getPreviewUrl: (file: File) => string;
+  handleRemoveFile: (index: number) => void;
+}
+
+function VirtualizedFileList({ fields, form, getPreviewUrl, handleRemoveFile }: VirtualizedFileListProps) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  
+  const virtualizer = useVirtualizer({
+    count: fields.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 52, // Estimated height of each row (48px + 4px gap)
+    overscan: 10, // Render 10 extra items outside visible area for smooth scrolling
+  });
+
+  return (
+    <div
+      ref={parentRef}
+      className="h-[200px] overflow-auto border rounded-md p-3"
+      style={{
+        contain: 'strict',
+      }}
+    >
+      <div
+        style={{
+          height: virtualizer.getTotalSize(),
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const field = fields[virtualItem.index];
+          const image = form.getValues(`images.${virtualItem.index}`);
+          
+          return (
+            <div
+              key={field.id}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: `${virtualItem.size}px`,
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              <div className="flex items-center justify-between p-2 rounded-md bg-muted/40 hover:bg-muted/60 transition-colors mb-2">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded overflow-hidden bg-muted flex-shrink-0">
+                    <img
+                      src={getPreviewUrl(image.file)}
+                      alt={`Preview ${virtualItem.index}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="text-sm font-medium truncate max-w-[200px]">
+                      {image.file.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {(image.file.size / 1024 / 1024).toFixed(1)}MB
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveFile(virtualItem.index);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
+}
+
+export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadProps) {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -110,26 +189,9 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
     }
 
     const filesArray = Array.from(files);
-    const currentCount = fields.length;
 
-    // Check if adding these files would exceed the limit
-    if (currentCount + filesArray.length > MAX_FILES) {
-      const availableSlots = MAX_FILES - currentCount;
-
-      if (availableSlots <= 0) {
-        form.setError('images', {
-          type: 'manual',
-          message: `You can only upload up to ${MAX_FILES} images at once`,
-        });
-        return;
-      }
-
-      filesArray.splice(availableSlots); // Truncate the array
-      form.setError('images', {
-        type: 'manual',
-        message: `Only ${availableSlots} files were added as the maximum is ${MAX_FILES} files`,
-      });
-    }
+    // Google Drive style: Accept unlimited files
+    // Large batches will be processed efficiently with progress indicators
 
     // Add the files to the form
     filesArray.forEach((file) => {
@@ -141,33 +203,16 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
         tags: [],
       });
     });
-
-    // If this is the first image being added, select it for editing
-    if (currentCount === 0 && filesArray.length > 0) {
-      setCurrentImageIndex(0);
-    }
   };
 
   // Handle removing a file
   const handleRemoveFile = (index: number) => {
     remove(index);
-
-    // Adjust current image index if needed
-    if (currentImageIndex === index) {
-      if (fields.length <= 1) {
-        setCurrentImageIndex(null);
-      } else if (index === fields.length - 1) {
-        setCurrentImageIndex(index - 1);
-      }
-    } else if (currentImageIndex !== null && currentImageIndex > index) {
-      setCurrentImageIndex(currentImageIndex - 1);
-    }
   };
 
   // Handle clearing all files
   const handleClearFiles = () => {
     form.setValue('images', []);
-    setCurrentImageIndex(null);
   };
 
   // Open file dialog
@@ -198,60 +243,88 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
     }
   };
 
-  // Navigation between images
-  const navigateToNextImage = () => {
-    if (currentImageIndex !== null && currentImageIndex < fields.length - 1) {
-      setCurrentImageIndex(currentImageIndex + 1);
-    }
-  };
 
-  const navigateToPreviousImage = () => {
-    if (currentImageIndex !== null && currentImageIndex > 0) {
-      setCurrentImageIndex(currentImageIndex - 1);
-    }
-  };
-
-  // Upload mutation
+  // Upload mutation with Google Drive-style batch processing
   const uploadMutation = useMutation({
     mutationFn: async (data: UploadFormData) => {
       const responses = [];
+      const totalImages = data.images.length;
+      
+      // Google Drive style: Process in batches for better performance and UX
+      const BATCH_SIZE = 5; // Process 5 files concurrently
+      const batches = [];
+      
+      for (let i = 0; i < data.images.length; i += BATCH_SIZE) {
+        batches.push(data.images.slice(i, i + BATCH_SIZE));
+      }
+
+      console.log(`📦 Processing ${totalImages} files in ${batches.length} batches (${BATCH_SIZE} concurrent uploads)`);
 
       // Initialize progress tracking
-      const totalImages = data.images.length;
 
       if (!session?.access_token) {
         throw new Error('Authentication required');
       }
 
-      for (let index = 0; index < data.images.length; index++) {
-        const image = data.images[index];
-        const baseProgress = (index / totalImages) * 100;
-        const imageProgressWeight = 100 / totalImages;
+      let completedFiles = 0;
 
-        try {
-          const uploader = new ResumableUploader(
-            import.meta.env.VITE_API_URL,
-            session.access_token,
-            // Use default chunk size (10MB) which ensures S3 multipart compatibility
-          );
+      // Process batches sequentially, but files within each batch concurrently
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        console.log(`📤 Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} files)`);
 
-          const result = await uploader.uploadFile(image.file, (progress) => {
-            const currentImageProgress = (progress / 100) * imageProgressWeight;
-            const overallProgress = baseProgress + currentImageProgress;
-            setUploadProgress(Math.min(overallProgress, 95));
-          });
+        // Process all files in current batch concurrently
+        const batchPromises = batch.map(async (image) => {
+          
+          try {
+            const uploader = new ResumableUploader(
+              import.meta.env.VITE_API_URL,
+              session.access_token,
+            );
 
-          if (!result.success) {
-            console.error('Upload failed:', result.error);
-            throw new Error(result.error || 'Upload failed');
+            const result = await uploader.uploadFile(image.file, (progress) => {
+              // Update progress for this specific file
+              const fileProgress = (completedFiles + (progress / 100)) / totalImages * 100;
+              setUploadProgress(Math.min(fileProgress, 95));
+            });
+
+            if (!result.success) {
+              console.error(`Upload failed for ${image.file.name}:`, result.error);
+              throw new Error(result.error || 'Upload failed');
+            }
+
+            // If we have a folder ID, move the file to that folder
+            if (folderId && result.uploadId) {
+              try {
+                await fetch(`${import.meta.env.VITE_API_URL}/api/v1/folders/files/${result.uploadId}/move`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({ folder_id: folderId }),
+                });
+              } catch (moveError) {
+                console.warn('Failed to move file to folder:', moveError);
+                // Don't fail the entire upload if folder assignment fails
+              }
+            }
+
+            console.log(`✅ Completed: ${image.file.name}`);
+            completedFiles++;
+            return { success: true, uploadId: result.uploadId };
+          } catch (error) {
+            console.error(`❌ Failed to upload ${image.file.name}:`, error);
+            throw error;
           }
+        });
 
-          // Upload completed successfully - no gallery creation needed yet
-          responses.push({ success: true, uploadId: result.uploadId });
-        } catch (error) {
-          console.error(`Failed to upload image ${index + 1}:`, error);
-          throw error;
-        }
+        // Wait for all files in current batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        responses.push(...batchResults);
+
+        // Update progress after batch completion
+        setUploadProgress((completedFiles / totalImages) * 100);
       }
 
       setUploadProgress(100);
@@ -261,23 +334,37 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
       resetForm();
 
       const imageCount = responses.length;
-      toast.success('Upload Complete!', {
-        description: `Successfully uploaded ${imageCount} ${imageCount === 1 ? 'image' : 'images'}`,
-      });
+      
+      // Google Drive style success message with more details for large uploads
+      if (imageCount > 10) {
+        toast.success('🎉 Bulk Upload Complete!', {
+          description: `Successfully uploaded ${imageCount} images using batch processing`,
+          duration: 5000,
+        });
+      } else {
+        toast.success('Upload Complete!', {
+          description: `Successfully uploaded ${imageCount} ${imageCount === 1 ? 'image' : 'images'}`,
+        });
+      }
 
       onSuccess();
     },
   });
 
   // Form submission
-  const onSubmit = form.handleSubmit((data) => {
-    uploadMutation.mutate(data);
-  });
+  const onSubmit = form.handleSubmit(
+    (data) => {
+      console.log('📤 Form submitted successfully with data:', data);
+      uploadMutation.mutate(data);
+    },
+    (errors) => {
+      console.error('❌ Form validation errors:', errors);
+    }
+  );
 
   // Reset form state
   const resetForm = () => {
     form.reset({ images: [] });
-    setCurrentImageIndex(null);
     setUploadProgress(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -296,24 +383,27 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
     };
   }, []);
 
+  // Imgur-style interface logic
+  const isNoFiles = fields.length === 0;
+  const isSingleFile = fields.length === 1;
+  const isMultipleFiles = fields.length > 1;
+
   return (
     <Form {...form}>
       <form onSubmit={onSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Left column: File selection and list */}
-          <div className="md:col-span-1 space-y-4">
+        {/* No files selected - Show drag & drop zone */}
+        {isNoFiles && (
+          <div>
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={handleOpenFileDialog}
               className={cn(
-                'border-2 border-dashed rounded-md p-6 text-center cursor-pointer transition-colors',
+                'border-2 border-dashed rounded-md p-8 text-center cursor-pointer transition-colors',
                 isDragging
                   ? 'border-primary bg-primary/10'
-                  : fields.length > 0
-                    ? 'border-primary/50 bg-primary/5'
-                    : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5',
+                  : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5',
               )}
             >
               <input
@@ -324,247 +414,275 @@ export function UnifiedImageUpload({ onSuccess }: UnifiedImageUploadProps) {
                 accept={ACCEPTED_IMAGE_TYPES.join(',')}
                 className="hidden"
               />
-              <div className="flex flex-col items-center justify-center gap-2">
-                <Upload className="h-8 w-8 text-muted-foreground" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Upload className="h-12 w-12 text-muted-foreground" />
+                <div className="space-y-2">
+                  <p className="text-lg font-medium">
                     Drag & drop images here or click to browse
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    Up to {MAX_FILES} images, max 10MB each
+                  <p className="text-sm text-muted-foreground">
+                    Upload any number of images, no size limits
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Smart upload: chunked for large files (&gt;10MB)
+                    Single image: full metadata editing • Multiple images: quick upload
                   </p>
                 </div>
               </div>
             </div>
 
             {form.formState.errors.images?.message && (
-              <p className="text-sm text-destructive">
+              <p className="text-sm text-destructive mt-2">
                 {form.formState.errors.images.message}
               </p>
             )}
-
-            {fields.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium">
-                    {fields.length} {fields.length === 1 ? 'image' : 'images'}{' '}
-                    selected
-                  </h3>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleClearFiles}
-                    className="h-8 px-2"
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Clear All
-                  </Button>
-                </div>
-
-                <div className="max-h-[300px] overflow-y-auto space-y-2 rounded-md border p-2">
-                  {fields.map((field, index) => {
-                    const image = form.getValues(`images.${index}`);
-
-                    return (
-                      <div
-                        key={field.id}
-                        className={cn(
-                          'flex items-center justify-between p-2 rounded-md',
-                          currentImageIndex === index
-                            ? 'bg-primary/10'
-                            : 'bg-muted/40',
-                          'hover:bg-primary/5 cursor-pointer',
-                        )}
-                        onClick={() => setCurrentImageIndex(index)}
-                      >
-                        <div className="flex items-center space-x-2 truncate">
-                          <div className="w-8 h-8 rounded overflow-hidden bg-muted">
-                            <img
-                              src={getPreviewUrl(image.file)}
-                              alt={`Preview ${index}`}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm truncate max-w-[120px]">
-                              {image.title || image.file.name}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-muted-foreground">
-                                {(image.file.size / 1024 / 1024).toFixed(1)}MB
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveFile(index);
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right column: Image preview and metadata editing */}
-          <div className="md:col-span-2">
-            {currentImageIndex !== null && fields[currentImageIndex] ? (
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">
-                      Edit Image Details
-                    </CardTitle>
-                    <div className="space-x-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={navigateToPreviousImage}
-                        disabled={currentImageIndex === 0}
-                        className="h-8 w-8"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={navigateToNextImage}
-                        disabled={currentImageIndex === fields.length - 1}
-                        className="h-8 w-8"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <CardDescription>
-                    Image {currentImageIndex + 1} of {fields.length}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="relative w-full h-[200px] overflow-hidden rounded-md bg-muted flex items-center justify-center">
-                    <img
-                      src={getPreviewUrl(
-                        form.getValues(`images.${currentImageIndex}.file`),
-                      )}
-                      alt={`Preview ${currentImageIndex}`}
-                      className="max-w-full max-h-[200px] object-contain"
-                    />
-                  </div>
-                  <div className="space-y-3">
-                    <FormField
-                      key={`title-field-${currentImageIndex}`}
-                      control={form.control}
-                      name={`images.${currentImageIndex}.title`}
-                      render={({ field }) => (
-                        <FormInput
-                          type="text"
-                          label="Title"
-                          placeholder="Image title (optional)"
-                          {...field}
-                        />
-                      )}
-                    />
-                    <FormField
-                      key={`description-field-${currentImageIndex}`}
-                      control={form.control}
-                      name={`images.${currentImageIndex}.description`}
-                      render={({ field }) => (
-                        <FormTextarea
-                          label="Description"
-                          placeholder="Image description (optional)"
-                          className="min-h-20"
-                          {...field}
-                        />
-                      )}
-                    />
-                    <FormField
-                      key={`tags-field-${currentImageIndex}`}
-                      control={form.control}
-                      name={`images.${currentImageIndex}.tags`}
-                      render={({ field }) => (
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium">Tags</label>
-                          <TagInput
-                            placeholder="Add tags (press Enter after each tag)"
-                            tags={field.value || []}
-                            onTagsChange={field.onChange}
-                          />
-                        </div>
-                      )}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full space-y-4 p-8 border-2 border-dashed rounded-md border-muted-foreground/25">
-                <div className="text-center">
-                  <h3 className="text-lg font-medium">No Images Selected</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Add image(s) using the panel on the left to edit their
-                    details
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleOpenFileDialog}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Select Images
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {uploadMutation.isPending && (
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Uploading images...</span>
-              <span>{uploadProgress}%</span>
-            </div>
-            <Progress value={uploadProgress} className="h-2" />
           </div>
         )}
 
+        {/* Single file - Show detailed metadata form (existing behavior) */}
+        {isSingleFile && (
+          <div className="space-y-6">
+            {/* File preview and actions */}
+            <div className="flex items-center justify-between p-4 border rounded-md bg-muted/20">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded overflow-hidden bg-muted">
+                  <img
+                    src={getPreviewUrl(fields[0].file)}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div>
+                  <p className="font-medium">{fields[0].file.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(fields[0].file.size / 1024 / 1024).toFixed(1)}MB
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleClearFiles}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Remove
+              </Button>
+            </div>
+
+            {/* Metadata form */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Image Details</CardTitle>
+                <CardDescription>
+                  Add optional metadata for your image
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative w-full h-[300px] overflow-hidden rounded-md bg-muted flex items-center justify-center">
+                  <img
+                    src={getPreviewUrl(fields[0].file)}
+                    alt="Preview"
+                    className="max-w-full max-h-[300px] object-contain"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <FormField
+                    control={form.control}
+                    name="images.0.title"
+                    render={({ field }) => (
+                      <FormInput
+                        type="text"
+                        label="Title"
+                        placeholder="Image title (optional)"
+                        {...field}
+                      />
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="images.0.description"
+                    render={({ field }) => (
+                      <FormTextarea
+                        label="Description"
+                        placeholder="Image description (optional)"
+                        className="min-h-20"
+                        {...field}
+                      />
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="images.0.tags"
+                    render={({ field }) => (
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Tags</label>
+                        <TagInput
+                          placeholder="Add tags (press Enter after each tag)"
+                          tags={field.value || []}
+                          onTagsChange={field.onChange}
+                        />
+                      </div>
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Multiple files - Imgur-style simple interface */}
+        {isMultipleFiles && (
+          <div className="space-y-6">
+            {/* Hidden FormFields to register all images with react-hook-form */}
+            <div className="hidden">
+              {fields.map((field, index) => (
+                <div key={field.id}>
+                  <FormField
+                    control={form.control}
+                    name={`images.${index}.title`}
+                    render={({ field: titleField }) => <input {...titleField} />}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`images.${index}.description`}
+                    render={({ field: descField }) => <input {...descField} />}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`images.${index}.tags`}
+                    render={({ field: tagsField }) => <input {...tagsField} />}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* File count and actions */}
+            <div className="flex items-center justify-between p-6 border rounded-md bg-muted/20">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center">
+                  <Upload className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">
+                    {fields.length} images ready to upload
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Total size: {(fields.reduce((sum, field) => sum + field.file.size, 0) / 1024 / 1024).toFixed(1)}MB
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenFileDialog}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add More
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearFiles}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Clear All
+                </Button>
+              </div>
+            </div>
+
+            {/* Virtualized file list for performance with large uploads */}
+            <VirtualizedFileList 
+              fields={fields}
+              form={form}
+              getPreviewUrl={getPreviewUrl}
+              handleRemoveFile={handleRemoveFile}
+            />
+
+            <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+              <p className="text-sm text-blue-700">
+                💡 <strong>Quick Upload:</strong> Multiple images will be uploaded without individual metadata. 
+                You can edit titles, descriptions, and tags after upload if needed.
+                {fields.length > 100 && (
+                  <span className="block mt-1">
+                    ⚡ Using virtualized rendering for optimal performance with {fields.length} files.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Hidden file input for all states */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={(e) => handleFilesSelected(e.target.files)}
+          multiple
+          accept={ACCEPTED_IMAGE_TYPES.join(',')}
+          className="hidden"
+        />
+
+        {/* Upload progress */}
+        {uploadMutation.isPending && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>
+                {fields.length > 10 
+                  ? `Processing ${fields.length} images in batches...` 
+                  : 'Uploading images...'
+                }
+              </span>
+              <span>{Math.round(uploadProgress)}%</span>
+            </div>
+            <Progress value={uploadProgress} className="h-2" />
+            {fields.length > 10 && (
+              <div className="text-xs text-muted-foreground text-center">
+                Google Drive style batch processing for optimal performance
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Error state */}
         {uploadMutation.isError && (
           <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
             Upload failed. Please try again.
           </div>
         )}
 
-        <DialogFooter>
-          <Button
-            type="submit"
-            disabled={fields.length === 0 || uploadMutation.isPending}
-            className="gap-1"
-          >
-            {uploadMutation.isPending ? (
-              'Uploading...'
-            ) : (
-              <>
-                <Upload className="h-4 w-4" />
-                Upload {fields.length > 0 && `(${fields.length})`}
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+        {/* Upload button - only show when files are selected */}
+        {!isNoFiles && (
+          <DialogFooter>
+            <Button
+              type="submit"
+              disabled={uploadMutation.isPending}
+              className="gap-1"
+              size="lg"
+              onClick={() => {
+                console.log('🔘 Upload button clicked!', { 
+                  filesLength: fields.length, 
+                  isNoFiles, 
+                  isSingleFile, 
+                  isMultipleFiles,
+                  formState: form.formState,
+                  formErrors: form.formState.errors
+                });
+              }}
+            >
+              {uploadMutation.isPending ? (
+                'Uploading...'
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  Upload {fields.length} {fields.length === 1 ? 'Image' : 'Images'}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        )}
       </form>
     </Form>
   );

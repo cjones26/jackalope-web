@@ -8,9 +8,9 @@ export interface GalleryImage {
   format: string;
   width: number;
   height: number;
-  url: string;
-  thumbnailUrl?: string;
   uploadedAt: string;
   createdAt: string;
   updatedAt: string;
+  folder_id: string | null;
+  hasThumbnail: boolean;
 }

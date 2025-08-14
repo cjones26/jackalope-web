@@ -15,12 +15,14 @@ interface AddImageDialogProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  folderId?: string | null;
 }
 
 export function AddImageDialog({
   open,
   onClose,
   onSuccess,
+  folderId,
 }: AddImageDialogProps) {
   // Handle dialog close
   const handleClose = () => {
@@ -42,7 +44,7 @@ export function AddImageDialog({
           </DialogClose>
         </DialogHeader>
 
-        <UnifiedImageUpload onSuccess={onSuccess} />
+        <UnifiedImageUpload onSuccess={onSuccess} folderId={folderId} />
       </DialogContent>
     </Dialog>
   );
