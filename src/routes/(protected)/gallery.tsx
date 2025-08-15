@@ -17,7 +17,10 @@ import { FolderGrid } from '@/features/gallery/FolderGrid';
 import { ImageDetails } from '@/features/gallery/ImageDetails';
 import { VirtualizedInfiniteGallery } from '@/features/gallery/VirtualizedInfiniteGallery';
 import { GalleryImage } from '@/features/gallery/types/GalleryImage';
-import { BreadcrumbItem, FolderContentsResponse } from '@/features/gallery/types/Folder';
+import {
+  BreadcrumbItem,
+  FolderContentsResponse,
+} from '@/features/gallery/types/Folder';
 import { Profile } from '@/shared/context/api/types/Profile';
 import { ApiError, useApi } from '@/shared/hooks/useApi';
 import {
@@ -102,15 +105,15 @@ function RouteComponent() {
   } = useInfiniteQuery<FolderContentsResponse, ApiError>({
     queryKey: ['folder-contents-infinite', currentFolderId, itemsPerPage],
     queryFn: async ({ pageParam = 1 }) => {
-      const endpoint = currentFolderId 
-        ? `/api/v1/folders/${currentFolderId}/contents` 
+      const endpoint = currentFolderId
+        ? `/api/v1/folders/${currentFolderId}/contents`
         : '/api/v1/folders/root/contents';
-      
+
       const params = new URLSearchParams({
         page: (pageParam as number).toString(),
         limit: itemsPerPage.toString(),
       });
-      
+
       return fetchWithAuth(`${endpoint}?${params}`);
     },
     getNextPageParam: (lastPage) => {
@@ -125,11 +128,11 @@ function RouteComponent() {
   // Flatten infinite data into single arrays
   const folderContents = useMemo(() => {
     if (!infiniteData) return null;
-    
-    const allFolders: any[] = [];
-    const allFiles: any[] = [];
-    
-    infiniteData.pages.forEach(page => {
+
+    const allFolders: FolderContentsResponse['folders'] = [];
+    const allFiles: GalleryImage[] = [];
+
+    infiniteData.pages.forEach((page) => {
       allFolders.push(...(page.folders || []));
       allFiles.push(...(page.files || []));
     });
@@ -143,7 +146,10 @@ function RouteComponent() {
   }, [infiniteData]);
 
   // Fetch profile data
-  const { data: profileData, isLoading: isProfileLoading } = useQuery<Profile, ApiError>({
+  const { data: profileData, isLoading: isProfileLoading } = useQuery<
+    Profile,
+    ApiError
+  >({
     queryKey: ['profile'],
     queryFn: () => fetchWithAuth('/api/v1/profile'),
   });
@@ -153,10 +159,10 @@ function RouteComponent() {
     queryKey: ['folder-breadcrumbs', currentFolderId],
     queryFn: async () => {
       if (!currentFolderId) return [];
-      
+
       const breadcrumbs: BreadcrumbItem[] = [];
       let folderId = currentFolderId;
-      
+
       // Walk up the parent chain to build breadcrumbs
       while (folderId) {
         const folder = await fetchWithAuth(`/api/v1/folders/${folderId}`);
@@ -167,7 +173,7 @@ function RouteComponent() {
         });
         folderId = folder.folder.parent_id;
       }
-      
+
       return breadcrumbs;
     },
     enabled: !!currentFolderId,
@@ -183,12 +189,11 @@ function RouteComponent() {
     () => folderContents?.files || [],
     [folderContents],
   );
-  
+
   const folderData = useMemo(
     () => folderContents?.folders || [],
     [folderContents],
   );
-
 
   // Handle folder navigation
   const handleFolderClick = (folderId: string) => {
@@ -201,23 +206,32 @@ function RouteComponent() {
   const handleNavigateTo = (folderId: string | null) => {
     navigate({
       to: '/gallery',
-      search: folderId ? { folderId } : {},
+      search: { folderId },
     });
   };
 
   const handleCreateFolder = () => {
     // Invalidate infinite query to refetch data
-    queryClient.invalidateQueries({ queryKey: ['folder-contents-infinite', currentFolderId] });
+    queryClient.invalidateQueries({
+      queryKey: ['folder-contents-infinite', currentFolderId],
+    });
     setIsCreateFolderOpen(false);
   };
 
-
   const handleImageAdded = useCallback(() => {
-    // Invalidate signed URL cache to ensure fresh URLs for newly uploaded files
-    queryClient.invalidateQueries({ queryKey: ['signed-url'] });
-    queryClient.invalidateQueries({ queryKey: ['bulk-signed-urls'] });
+    console.log('🔄 Starting cache invalidation after upload...');
+
+    // Clear all signed URL related queries to ensure fresh URLs
+    queryClient.removeQueries({ queryKey: ['signed-url'] });
+    queryClient.removeQueries({ queryKey: ['bulk-signed-urls'] });
+
     // Invalidate infinite query to refetch data
-    queryClient.invalidateQueries({ queryKey: ['folder-contents-infinite', currentFolderId] });
+    queryClient.invalidateQueries({
+      queryKey: ['folder-contents-infinite', currentFolderId],
+      refetchType: 'all', // Refetch both active and inactive queries
+    });
+
+    console.log('✅ Cache invalidation complete');
     setIsAddDialogOpen(false);
   }, [queryClient, currentFolderId]);
 
@@ -225,18 +239,21 @@ function RouteComponent() {
     (deletedImageId: string | undefined) => {
       if (deletedImageId) {
         // Update the query cache for an immediate UI update
-        queryClient.setQueryData<FolderContentsResponse>(['folder-contents', currentFolderId], (oldData) => {
-          if (!oldData) {
-            return oldData;
-          }
+        queryClient.setQueryData<FolderContentsResponse>(
+          ['folder-contents', currentFolderId],
+          (oldData) => {
+            if (!oldData) {
+              return oldData;
+            }
 
-          return {
-            ...oldData,
-            files: oldData.files.filter(
-              (img: GalleryImage) => img._id !== deletedImageId,
-            ),
-          };
-        });
+            return {
+              ...oldData,
+              files: oldData.files.filter(
+                (img: GalleryImage) => img._id !== deletedImageId,
+              ),
+            };
+          },
+        );
       }
 
       setSelectedImage(null);
@@ -244,7 +261,9 @@ function RouteComponent() {
       queryClient.invalidateQueries({ queryKey: ['signed-url'] });
       queryClient.invalidateQueries({ queryKey: ['bulk-signed-urls'] });
       // Invalidate infinite query to refetch data
-      queryClient.invalidateQueries({ queryKey: ['folder-contents-infinite', currentFolderId] });
+      queryClient.invalidateQueries({
+        queryKey: ['folder-contents-infinite', currentFolderId],
+      });
     },
     [queryClient, currentFolderId],
   );
@@ -305,18 +324,21 @@ function RouteComponent() {
     },
     onSuccess: (data) => {
       // Update cache to remove deleted images
-      queryClient.setQueryData<FolderContentsResponse>(['folder-contents', currentFolderId], (oldData) => {
-        if (!oldData) {
-          return oldData;
-        }
+      queryClient.setQueryData<FolderContentsResponse>(
+        ['folder-contents', currentFolderId],
+        (oldData) => {
+          if (!oldData) {
+            return oldData;
+          }
 
-        return {
-          ...oldData,
-          files: oldData.files.filter(
-            (img: GalleryImage) => !selectedImageIds.includes(img._id),
-          ),
-        };
-      });
+          return {
+            ...oldData,
+            files: oldData.files.filter(
+              (img: GalleryImage) => !selectedImageIds.includes(img._id),
+            ),
+          };
+        },
+      );
 
       setSelectedImageIds([]);
       setIsMultiSelectMode(false);
@@ -330,7 +352,9 @@ function RouteComponent() {
       queryClient.invalidateQueries({ queryKey: ['signed-url'] });
       queryClient.invalidateQueries({ queryKey: ['bulk-signed-urls'] });
       // Invalidate infinite query to refetch data
-      queryClient.invalidateQueries({ queryKey: ['folder-contents-infinite', currentFolderId] });
+      queryClient.invalidateQueries({
+        queryKey: ['folder-contents-infinite', currentFolderId],
+      });
     },
     onError: () => {
       toast.error('Error', {
@@ -373,16 +397,19 @@ function RouteComponent() {
       <div className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto">
         {/* Breadcrumb navigation */}
         {breadcrumbs.length > 0 && (
-          <FolderBreadcrumbs 
-            breadcrumbs={breadcrumbs} 
-            onNavigate={handleNavigateTo} 
+          <FolderBreadcrumbs
+            breadcrumbs={breadcrumbs}
+            onNavigate={handleNavigateTo}
           />
         )}
-        
+
         <div className="flex justify-between items-center">
           <H3>{getGalleryTitle()}</H3>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setIsCreateFolderOpen(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsCreateFolderOpen(true)}
+            >
               <FolderPlus className="h-4 w-4" />
               New Folder
             </Button>
@@ -396,23 +423,27 @@ function RouteComponent() {
           <p className="text-muted-foreground mb-4">
             {(() => {
               if (isError && error?.status === 404) {
-                return currentFolderId ? 'This folder is empty.' : 'Your gallery is empty. Create folders or upload images to get started.';
+                return currentFolderId
+                  ? 'This folder is empty.'
+                  : 'Your gallery is empty. Create folders or upload images to get started.';
               }
               if (isError) {
                 return `There was an error: ${error?.statusText || 'Unknown error'}`;
               }
-              return currentFolderId ? 'This folder is empty.' : 'Your gallery is empty. Create folders or upload images to get started.';
+              return currentFolderId
+                ? 'This folder is empty.'
+                : 'Your gallery is empty. Create folders or upload images to get started.';
             })()}
           </p>
         </div>
-        
+
         <AddImageDialog
           open={isAddDialogOpen}
           onClose={() => setIsAddDialogOpen(false)}
           onSuccess={handleImageAdded}
           folderId={currentFolderId}
         />
-        
+
         <CreateFolderDialog
           open={isCreateFolderOpen}
           onClose={() => setIsCreateFolderOpen(false)}
@@ -427,12 +458,12 @@ function RouteComponent() {
     <div className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto">
       {/* Breadcrumb navigation */}
       {breadcrumbs.length > 0 && (
-        <FolderBreadcrumbs 
-          breadcrumbs={breadcrumbs} 
-          onNavigate={handleNavigateTo} 
+        <FolderBreadcrumbs
+          breadcrumbs={breadcrumbs}
+          onNavigate={handleNavigateTo}
         />
       )}
-      
+
       {/* Header */}
       <div className="w-full mb-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-0">
@@ -474,10 +505,17 @@ function RouteComponent() {
               </>
             ) : (
               <>
-                <Button variant="outline" onClick={toggleMultiSelectMode} disabled={imageData.length === 0}>
+                <Button
+                  variant="outline"
+                  onClick={toggleMultiSelectMode}
+                  disabled={imageData.length === 0}
+                >
                   Select Multiple
                 </Button>
-                <Button variant="outline" onClick={() => setIsCreateFolderOpen(true)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsCreateFolderOpen(true)}
+                >
                   <FolderPlus className="h-4 w-4" />
                   New Folder
                 </Button>
@@ -492,7 +530,7 @@ function RouteComponent() {
       </div>
 
       {/* Folders */}
-      <FolderGrid 
+      <FolderGrid
         folders={folderData}
         onFolderClick={handleFolderClick}
         // TODO: Add folder management functionality
@@ -522,7 +560,7 @@ function RouteComponent() {
         onSuccess={handleImageAdded}
         folderId={currentFolderId}
       />
-      
+
       <CreateFolderDialog
         open={isCreateFolderOpen}
         onClose={() => setIsCreateFolderOpen(false)}
