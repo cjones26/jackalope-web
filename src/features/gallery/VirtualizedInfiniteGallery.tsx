@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, memo, useState } from 'react';
 
 import { SecureImage } from './SecureImage';
 import { GalleryImage } from './types/GalleryImage';
@@ -9,6 +9,7 @@ interface VirtualizedInfiniteGalleryProps {
   columnCount: number;
   isMultiSelectMode: boolean;
   selectedImageIds: string[];
+  deletingImageIds: string[];
   onImageClick: (image: GalleryImage, event?: React.MouseEvent) => void;
   onImageSelect: (imageId: string, event: React.MouseEvent | MouseEvent) => void;
   onLoadMore: () => void;
@@ -16,11 +17,12 @@ interface VirtualizedInfiniteGalleryProps {
   isFetchingNextPage: boolean;
 }
 
-export function VirtualizedInfiniteGallery({
+export const VirtualizedInfiniteGallery = memo(function VirtualizedInfiniteGallery({
   images,
   columnCount,
   isMultiSelectMode,
   selectedImageIds,
+  deletingImageIds,
   onImageClick,
   onImageSelect,
   onLoadMore,
@@ -29,36 +31,71 @@ export function VirtualizedInfiniteGallery({
 }: VirtualizedInfiniteGalleryProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Create proper masonry layout with column distribution
-  const columns = useMemo(() => {
-    if (!columnCount || !images.length) {
-      return [] as GalleryImage[][];
+  // Virtualization state
+  const [scrollY, setScrollY] = useState(0);
+  
+  // Track scroll position for virtualization
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Fixed Aspect Ratio Grid with Sliding Virtualization Window
+  const { visibleImages, containerHeight } = useMemo(() => {
+    if (!images.length) {
+      return { visibleImages: [], containerHeight: 0 };
     }
 
-    // Create array of column heights for better distribution
-    const columnHeights = Array(columnCount).fill(0);
-    // Create array of columns with images
-    const columnArrays: GalleryImage[][] = Array.from(
-      { length: columnCount },
-      () => [],
-    );
-
-    // Place each image in the shortest column
-    images.forEach((image) => {
-      const shortestColumnIndex = columnHeights.indexOf(
-        Math.min(...columnHeights),
-      );
-      columnArrays[shortestColumnIndex].push(image);
-
-      // Update the column height (approximate based on aspect ratio)
-      const aspectRatio = image.width / image.height || 1;
-      // Assuming a standard column width, calculate the height this image would add
-      const imageHeight = 300 / aspectRatio; // Approximate base height
-      columnHeights[shortestColumnIndex] += imageHeight + 16; // Add gap
+    // Keep original API order - don't sort by ID to preserve upload/API order
+    const allImages = [...images];
+    
+    // Calculate virtualization parameters
+    const itemHeight = 300; // Approximate height of each square item including gap
+    const rowHeight = itemHeight;
+    const imagesPerRow = columnCount;
+    const totalRows = Math.ceil(allImages.length / imagesPerRow);
+    const totalHeight = totalRows * rowHeight;
+    
+    // Calculate visible range with buffer
+    const viewportHeight = window.innerHeight;
+    const bufferSize = viewportHeight; // Render 1 screen above and below
+    const startY = Math.max(0, scrollY - bufferSize);
+    const endY = scrollY + viewportHeight + bufferSize;
+    
+    // Calculate visible rows
+    const startRow = Math.floor(startY / rowHeight);
+    const endRow = Math.min(totalRows - 1, Math.ceil(endY / rowHeight));
+    
+    // Calculate visible images
+    const startIndex = startRow * imagesPerRow;
+    const endIndex = Math.min(allImages.length - 1, (endRow + 1) * imagesPerRow - 1);
+    
+    const visibleSlice = allImages.slice(startIndex, endIndex + 1);
+    
+    // Add positioning info to each image
+    const visibleWithPosition = visibleSlice.map((image, index) => {
+      const absoluteIndex = startIndex + index;
+      const row = Math.floor(absoluteIndex / imagesPerRow);
+      const col = absoluteIndex % imagesPerRow;
+      
+      return {
+        ...image,
+        style: {
+          position: 'absolute' as const,
+          top: `${row * rowHeight}px`,
+          left: `${(col / imagesPerRow) * 100}%`,
+          width: `${100 / imagesPerRow}%`,
+          height: `${itemHeight - 16}px`, // Subtract gap
+        }
+      };
     });
-
-    return columnArrays;
-  }, [images, columnCount]);
+    
+    return {
+      visibleImages: visibleWithPosition,
+      containerHeight: totalHeight
+    };
+  }, [images.length, scrollY, columnCount]); // Recalculate on scroll and image changes
 
   // Set up intersection observer for infinite scroll using MAIN PAGE scroll
   useEffect(() => {
@@ -88,68 +125,66 @@ export function VirtualizedInfiniteGallery({
     };
   }, [hasNextPage, isFetchingNextPage, onLoadMore, images.length]);
 
-  // Masonry layout with infinite scroll using main page scroll - single scrollbar UX
+  // Virtualized Fixed Aspect Ratio Grid - High performance sliding window
   return (
     <div className="w-full">
-      {/* Masonry Grid - flows with main page */}
+      {/* Virtualized Container with Fixed Height */}
       <div
-        className="grid gap-4"
-        style={{
-          gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
-        }}
+        className="relative w-full"
+        style={{ height: `${containerHeight}px` }}
       >
-        {columns.map((column, colIndex) => (
-          <div key={`column-${colIndex}`} className="flex flex-col gap-4">
-            {column.map((image) => {
-              const isSelected = selectedImageIds.includes(image._id);
-              const aspectRatio = image.width / image.height || 1;
+        {/* Only render visible images */}
+        {visibleImages.map((image) => {
+          const isSelected = selectedImageIds.includes(image._id);
+          const isDeleting = deletingImageIds.includes(image._id);
 
-              return (
-                <div
-                  key={image._id}
-                  className={`relative overflow-hidden rounded-md shadow-md cursor-pointer hover:shadow-lg transition-shadow ${
-                    isSelected ? 'ring-2 ring-primary' : ''
-                  }`}
-                  style={{ 
-                    // Remove fixed aspect ratio to allow natural masonry sizing
-                    minHeight: `${Math.max(200, 300 / aspectRatio)}px`
-                  }}
-                  onClick={(e) => onImageClick(image, e)}
-                >
-                  <SecureImage
-                    uploadId={image._id}
-                    alt={image.title || 'Gallery image'}
-                    className="w-full h-auto object-cover"
-                    thumbnail={true} // Force thumbnails for performance
-                  />
-                  {isMultiSelectMode && (
-                    <div
-                      className="absolute top-2 right-2 bg-background rounded-md flex items-center justify-center w-6 h-6"
-                      onClick={(e) => onImageSelect(image._id, e)}
-                    >
-                      <Checkbox
-                        checked={isSelected}
-                        className="data-[state=checked]:bg-primary"
-                      />
-                    </div>
-                  )}
-                  {image.title && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-sm truncate">
-                      {image.title}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
+          return (
+            <div
+              key={image._id}
+              className={`absolute overflow-hidden rounded-md shadow-md cursor-pointer hover:shadow-lg transition-all duration-200 ${
+                isSelected ? 'ring-2 ring-primary' : ''
+              } ${isDeleting ? 'opacity-50' : ''}`}
+              style={{
+                ...image.style,
+                padding: '8px', // Gap between items
+              }}
+              onClick={(e) => onImageClick(image, e)}
+            >
+              <div className="relative w-full h-full">
+                <SecureImage
+                  uploadId={image._id}
+                  alt={image.title || 'Gallery image'}
+                  className="w-full h-full object-cover rounded-md"
+                  thumbnail={true}
+                  disabled={isDeleting}
+                />
+                {isMultiSelectMode && (
+                  <div
+                    className="absolute top-2 right-2 bg-background rounded-md flex items-center justify-center w-6 h-6"
+                    onClick={(e) => onImageSelect(image._id, e)}
+                  >
+                    <Checkbox
+                      checked={isSelected}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </div>
+                )}
+                {image.title && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-sm truncate">
+                    {image.title}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Performance indicator */}
       {images.length > 50 && (
         <div className="flex items-center justify-center py-2">
           <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
-            📊 {images.length} images • Masonry layout
+            📊 {images.length} images • {visibleImages.length} rendered • Virtualized grid
           </span>
         </div>
       )}
@@ -177,4 +212,15 @@ export function VirtualizedInfiniteGallery({
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Simple memo comparison for fixed grid
+  return (
+    prevProps.images === nextProps.images &&
+    prevProps.columnCount === nextProps.columnCount &&
+    prevProps.isMultiSelectMode === nextProps.isMultiSelectMode &&
+    JSON.stringify(prevProps.selectedImageIds) === JSON.stringify(nextProps.selectedImageIds) &&
+    JSON.stringify(prevProps.deletingImageIds) === JSON.stringify(nextProps.deletingImageIds) &&
+    prevProps.hasNextPage === nextProps.hasNextPage &&
+    prevProps.isFetchingNextPage === nextProps.isFetchingNextPage
+  );
+});

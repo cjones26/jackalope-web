@@ -1,4 +1,3 @@
-import { useWindowSize } from '@react-hook/window-size';
 import {
   useMutation,
   useQuery,
@@ -7,8 +6,9 @@ import {
 } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { FolderPlus, Plus, Trash, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { toast } from 'sonner';
+
 
 import { AddImageDialog } from '@/features/gallery/AddImageDialog';
 import { CreateFolderDialog } from '@/features/gallery/CreateFolderDialog';
@@ -58,92 +58,175 @@ const BREAKPOINTS = {
   '2xl': 1536, // 5 columns
 };
 
+// Create a context to manage selectedImage without causing re-renders
+const useSelectedImageManager = () => {
+  const [selectedImage, setSelectedImageState] = useState<GalleryImage | null>(null);
+  
+  const setSelectedImage = useCallback((image: GalleryImage | null) => {
+    setSelectedImageState(image);
+  }, []);
+  
+  return { selectedImage, setSelectedImage };
+};
+
 function RouteComponent() {
   const { fetchWithAuth } = useApi();
+  
   const navigate = useNavigate();
   const { folderId: currentFolderId } = Route.useSearch();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+  const { selectedImage, setSelectedImage } = useSelectedImageManager();
   const queryClient = useQueryClient();
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
-  const [width] = useWindowSize();
-
-  // Calculate responsive column count based on window width
-  const getColumnCount = (): number => {
-    if (width < BREAKPOINTS.md) {
-      return 1;
-    }
-    if (width < BREAKPOINTS.lg) {
-      return 2;
-    }
-    if (width < BREAKPOINTS.xl) {
-      return 3;
-    }
-    if (width < BREAKPOINTS['2xl']) {
-      return 4;
-    }
-    return 5;
-  };
-
-  const columnCount = getColumnCount();
+  const [deletingImageIds, setDeletingImageIds] = useState<string[]>([]);
+  // Fixed 5 columns for denser grid
+  const columnCount = 5;
 
   const [itemsPerPage] = useState(50); // Good balance for performance
+  
+  // CUSTOM INFINITE SCROLL IMPLEMENTATION - Bypassing React Query completely
+  const [customFolderData, setCustomFolderData] = useState<{
+    folders: FolderContentsResponse['folders'];
+    files: GalleryImage[];
+    pagination: FolderContentsResponse['pagination'] | null;
+    total_items: number;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const currentPageRef = useRef(1);
+  const allPagesRef = useRef<FolderContentsResponse[]>([]);
 
-  // Fetch folder contents with infinite scrolling
-  const {
-    data: infiniteData,
-    isLoading,
-    isError,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery<FolderContentsResponse, ApiError>({
-    queryKey: ['folder-contents-infinite', currentFolderId, itemsPerPage],
-    queryFn: async ({ pageParam = 1 }) => {
-      const endpoint = currentFolderId
-        ? `/api/v1/folders/${currentFolderId}/contents`
-        : '/api/v1/folders/root/contents';
-
-      const params = new URLSearchParams({
-        page: (pageParam as number).toString(),
-        limit: itemsPerPage.toString(),
-      });
-
-      return fetchWithAuth(`${endpoint}?${params}`);
-    },
-    getNextPageParam: (lastPage) => {
-      if (lastPage.pagination?.has_next) {
-        return lastPage.pagination.page + 1;
-      }
-      return undefined;
-    },
-    initialPageParam: 1,
-  });
-
-  // Flatten infinite data into single arrays
+  // Stable folder contents reference - only changes when actual data changes
   const folderContents = useMemo(() => {
-    if (!infiniteData) return null;
+    if (!customFolderData) return null;
+    return customFolderData;
+  }, [customFolderData?.files, customFolderData?.folders, customFolderData?.total_items]);
 
-    const allFolders: FolderContentsResponse['folders'] = [];
-    const allFiles: GalleryImage[] = [];
+  // Function to fetch a specific page
+  const fetchPage = useCallback(async (page: number) => {
+    const endpoint = currentFolderId
+      ? `/api/v1/folders/${currentFolderId}/contents`
+      : '/api/v1/folders/root/contents';
 
-    infiniteData.pages.forEach((page) => {
-      allFolders.push(...(page.folders || []));
-      allFiles.push(...(page.files || []));
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: itemsPerPage.toString(),
     });
 
-    return {
-      folders: allFolders,
-      files: allFiles,
-      pagination: infiniteData.pages[infiniteData.pages.length - 1]?.pagination,
-      total_items: infiniteData.pages[0]?.pagination?.total_items || 0,
+    const result = await fetchWithAuth(`${endpoint}?${params}`);
+    return result;
+  }, [currentFolderId, itemsPerPage]);
+
+  // Function to fetch next page
+  const fetchNextPage = useCallback(async () => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    
+    setIsFetchingNextPage(true);
+    try {
+      const nextPage = currentPageRef.current + 1;
+      const newPageData = await fetchPage(nextPage);
+      
+      // Handle case where fetchPage returns undefined (auth failure)
+      if (!newPageData) {
+        return;
+      }
+      
+      // Add to our pages array
+      allPagesRef.current.push(newPageData);
+      currentPageRef.current = nextPage;
+      
+      // Flatten all pages and update state with stable reference
+      const allFolders: FolderContentsResponse['folders'] = [];
+      const allFiles: GalleryImage[] = [];
+      
+      allPagesRef.current.forEach((page) => {
+        allFolders.push(...(page.folders || []));
+        allFiles.push(...(page.files || []));
+      });
+      
+      const newData = {
+        folders: allFolders,
+        files: allFiles,
+        pagination: newPageData.pagination,
+        total_items: allPagesRef.current[0]?.pagination?.total_items || 0,
+      };
+      
+      setCustomFolderData(prevData => {
+        // Compare content to prevent unnecessary updates
+        if (prevData && 
+            prevData.total_items === newData.total_items &&
+            prevData.files.length === newData.files.length &&
+            prevData.folders.length === newData.folders.length &&
+            prevData.files[0]?._id === newData.files[0]?._id) {
+          return prevData;
+        }
+        return newData;
+      });
+      
+      setHasNextPage(!!newPageData.pagination?.has_next);
+    } catch (err) {
+      console.error('Error fetching next page:', err);
+      // Don't show error to user for infinite scroll failures
+      // The auth system will handle redirects if needed
+    } finally {
+      setIsFetchingNextPage(false);
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchPage]);
+
+  // Initial data fetch when folder changes
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setIsLoading(true);
+      setIsError(false);
+      setError(null);
+      currentPageRef.current = 1;
+      allPagesRef.current = [];
+      
+      try {
+        const initialPageData = await fetchPage(1);
+        
+        // Set up our pages array
+        allPagesRef.current = [initialPageData];
+        
+        // Set initial data with stable reference - only update if different
+        const newData = {
+          folders: initialPageData.folders || [],
+          files: initialPageData.files || [],
+          pagination: initialPageData.pagination,
+          total_items: initialPageData.pagination?.total_items || 0,
+        };
+        
+        setCustomFolderData(prevData => {
+          // Compare content to prevent unnecessary updates
+          if (prevData && 
+              prevData.total_items === newData.total_items &&
+              prevData.files.length === newData.files.length &&
+              prevData.folders.length === newData.folders.length &&
+              prevData.files[0]?._id === newData.files[0]?._id) {
+            return prevData;
+          }
+          return newData;
+        });
+        
+        setHasNextPage(!!initialPageData.pagination?.has_next);
+      } catch (err) {
+        setIsError(true);
+        setError(err as ApiError);
+      } finally {
+        setIsLoading(false);
+      }
     };
-  }, [infiniteData]);
+
+    loadInitialData();
+  }, [currentFolderId, fetchPage]);
+
 
   // Fetch profile data
   const { data: profileData, isLoading: isProfileLoading } = useQuery<
@@ -152,11 +235,13 @@ function RouteComponent() {
   >({
     queryKey: ['profile'],
     queryFn: () => fetchWithAuth('/api/v1/profile'),
+    staleTime: 30 * 60 * 1000, // 30 minutes - profile rarely changes
   });
 
   // Fetch breadcrumb chain for current folder
   const { data: breadcrumbData } = useQuery<BreadcrumbItem[], ApiError>({
     queryKey: ['folder-breadcrumbs', currentFolderId],
+    staleTime: 10 * 60 * 1000, // 10 minutes - folder structure rarely changes
     queryFn: async () => {
       if (!currentFolderId) return [];
 
@@ -184,98 +269,133 @@ function RouteComponent() {
     setBreadcrumbs(breadcrumbData || []);
   }, [breadcrumbData]);
 
-  // Get images and folders from current folder
-  const imageData = useMemo(
-    () => folderContents?.files || [],
-    [folderContents],
-  );
+  // Get images and folders from current folder, filtering out deleting images
+  const imageData = useMemo(() => {
+    const filtered = (folderContents?.files || []).filter(
+      (image) => !deletingImageIds.includes(image._id),
+    );
+    return filtered;
+  }, [folderContents?.files, deletingImageIds]);
 
   const folderData = useMemo(
     () => folderContents?.folders || [],
-    [folderContents],
+    [folderContents?.folders],
   );
 
+
   // Handle folder navigation
-  const handleFolderClick = (folderId: string) => {
+  const handleFolderClick = useCallback((folderId: string) => {
     navigate({
       to: '/gallery',
       search: { folderId },
     });
-  };
+  }, [navigate]);
 
-  const handleNavigateTo = (folderId: string | null) => {
+  const handleNavigateTo = useCallback((folderId: string | null) => {
     navigate({
       to: '/gallery',
       search: { folderId },
     });
-  };
+  }, [navigate]);
 
-  const handleCreateFolder = () => {
-    // Invalidate infinite query to refetch data
-    queryClient.invalidateQueries({
-      queryKey: ['folder-contents-infinite', currentFolderId],
-    });
+  const handleCreateFolder = useCallback(() => {
+    // Refresh the custom data by re-fetching
+    const refreshData = async () => {
+      try {
+        const refreshedData = await fetchPage(1);
+        allPagesRef.current = [refreshedData];
+        currentPageRef.current = 1;
+        
+        setCustomFolderData({
+          folders: refreshedData.folders || [],
+          files: refreshedData.files || [],
+          pagination: refreshedData.pagination,
+          total_items: refreshedData.pagination?.total_items || 0,
+        });
+        
+        setHasNextPage(!!refreshedData.pagination?.has_next);
+      } catch (err) {
+        console.error('Error refreshing data:', err);
+      }
+    };
+    
+    refreshData();
     setIsCreateFolderOpen(false);
-  };
+  }, [fetchPage]);
 
   const handleImageAdded = useCallback(() => {
-    console.log('🔄 Starting cache invalidation after upload...');
 
     // Clear all signed URL related queries to ensure fresh URLs
     queryClient.removeQueries({ queryKey: ['signed-url'] });
     queryClient.removeQueries({ queryKey: ['bulk-signed-urls'] });
 
-    // Invalidate infinite query to refetch data
-    queryClient.invalidateQueries({
-      queryKey: ['folder-contents-infinite', currentFolderId],
-      refetchType: 'all', // Refetch both active and inactive queries
-    });
-
-    console.log('✅ Cache invalidation complete');
+    // Refresh the custom data by re-fetching
+    const refreshData = async () => {
+      try {
+        const refreshedData = await fetchPage(1);
+        allPagesRef.current = [refreshedData];
+        currentPageRef.current = 1;
+        
+        setCustomFolderData({
+          folders: refreshedData.folders || [],
+          files: refreshedData.files || [],
+          pagination: refreshedData.pagination,
+          total_items: refreshedData.pagination?.total_items || 0,
+        });
+        
+        setHasNextPage(!!refreshedData.pagination?.has_next);
+      } catch (err) {
+        console.error('Error refreshing data:', err);
+      }
+    };
+    
+    refreshData();
     setIsAddDialogOpen(false);
-  }, [queryClient, currentFolderId]);
+  }, [queryClient, fetchPage]);
 
   const handleImageUpdated = useCallback(
     (deletedImageId: string | undefined) => {
+      
       if (deletedImageId) {
-        // Update the query cache for an immediate UI update
-        queryClient.setQueryData<FolderContentsResponse>(
-          ['folder-contents', currentFolderId],
-          (oldData) => {
-            if (!oldData) {
-              return oldData;
-            }
+        // Optimistically remove the image from custom data
+        setCustomFolderData(prevData => {
+          if (!prevData) return prevData;
+          
+          const newData = {
+            ...prevData,
+            files: prevData.files.filter(file => file._id !== deletedImageId),
+          };
+          
+          
+          return newData;
+        });
+        
+        // Also update the pages refs to keep them in sync
+        allPagesRef.current = allPagesRef.current.map(page => ({
+          ...page,
+          files: page.files.filter(file => file._id !== deletedImageId),
+        }));
 
-            return {
-              ...oldData,
-              files: oldData.files.filter(
-                (img: GalleryImage) => img._id !== deletedImageId,
-              ),
-            };
-          },
-        );
+        // Remove signed URL cache entries for the deleted image
+        queryClient.removeQueries({
+          queryKey: ['signed-url', deletedImageId],
+          exact: false,
+        });
       }
 
-      setSelectedImage(null);
-      // Invalidate signed URL cache when images are updated/deleted
-      queryClient.invalidateQueries({ queryKey: ['signed-url'] });
-      queryClient.invalidateQueries({ queryKey: ['bulk-signed-urls'] });
-      // Invalidate infinite query to refetch data
-      queryClient.invalidateQueries({
-        queryKey: ['folder-contents-infinite', currentFolderId],
-      });
+        setSelectedImage(null);
     },
-    [queryClient, currentFolderId],
+    [queryClient],
   );
 
-  const toggleMultiSelectMode = () => {
+  const toggleMultiSelectMode = useCallback(() => {
     if (isMultiSelectMode) {
       setSelectedImageIds([]);
     }
     setIsMultiSelectMode(!isMultiSelectMode);
-  };
+  }, [isMultiSelectMode]);
 
-  const toggleImageSelection = (
+  const toggleImageSelection = useCallback((
     imageId: string,
     event: React.MouseEvent | MouseEvent,
   ) => {
@@ -289,15 +409,15 @@ function RouteComponent() {
         return [...prev, imageId];
       }
     });
-  };
+  }, []);
 
-  const handleImageClick = (image: GalleryImage, event?: React.MouseEvent) => {
+  const handleImageClick = useCallback((image: GalleryImage, event?: React.MouseEvent) => {
     if (isMultiSelectMode) {
       toggleImageSelection(image._id, event || new MouseEvent('click'));
     } else {
       setSelectedImage(image);
     }
-  };
+  }, [isMultiSelectMode, toggleImageSelection]);
 
   const selectAllImages = () => {
     setSelectedImageIds(imageData.map((img) => img._id));
@@ -311,7 +431,8 @@ function RouteComponent() {
   const deleteMultipleMutation = useMutation<
     DeleteResponse,
     ApiError,
-    string[]
+    string[],
+    { previousData: unknown }
   >({
     mutationFn: async (fileIds: string[]) => {
       return fetchWithAuth('/api/v1/folders/files', {
@@ -322,41 +443,22 @@ function RouteComponent() {
         body: JSON.stringify({ fileIds }),
       });
     },
+    onMutate: async (fileIds: string[]) => {
+      setDeletingImageIds(fileIds);
+      return { previousData: null };
+    },
     onSuccess: (data) => {
-      // Update cache to remove deleted images
-      queryClient.setQueryData<FolderContentsResponse>(
-        ['folder-contents', currentFolderId],
-        (oldData) => {
-          if (!oldData) {
-            return oldData;
-          }
-
-          return {
-            ...oldData,
-            files: oldData.files.filter(
-              (img: GalleryImage) => !selectedImageIds.includes(img._id),
-            ),
-          };
-        },
-      );
-
       setSelectedImageIds([]);
       setIsMultiSelectMode(false);
       setIsDeleteDialogOpen(false);
+      setDeletingImageIds([]);
 
       toast.info('Images Deleted', {
         description: `Successfully deleted ${data.deletedCount} images`,
       });
-
-      // Invalidate signed URL cache for deleted images
-      queryClient.invalidateQueries({ queryKey: ['signed-url'] });
-      queryClient.invalidateQueries({ queryKey: ['bulk-signed-urls'] });
-      // Invalidate infinite query to refetch data
-      queryClient.invalidateQueries({
-        queryKey: ['folder-contents-infinite', currentFolderId],
-      });
     },
     onError: () => {
+      setDeletingImageIds([]); // Clear deleting state on error
       toast.error('Error', {
         description: 'Failed to delete images. Please try again.',
       });
@@ -481,8 +583,17 @@ function RouteComponent() {
                     onClick={handleDeleteButtonClick}
                     disabled={deleteMultipleMutation.isPending}
                   >
-                    <Trash className="h-4 w-4 mr-1" />
-                    Delete Selected
+                    {deleteMultipleMutation.isPending ? (
+                      <>
+                        <Spinner className="h-4 w-4 mr-1" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash className="h-4 w-4 mr-1" />
+                        Delete Selected
+                      </>
+                    )}
                   </Button>
                 )}
                 {selectedImageIds.length < imageData.length ? (
@@ -533,10 +644,6 @@ function RouteComponent() {
       <FolderGrid
         folders={folderData}
         onFolderClick={handleFolderClick}
-        // TODO: Add folder management functionality
-        // onFolderRename={handleFolderRename}
-        // onFolderDelete={handleFolderDelete}
-        // onFolderMove={handleFolderMove}
       />
 
       {/* Virtualized Infinite Gallery */}
@@ -546,6 +653,7 @@ function RouteComponent() {
           columnCount={columnCount}
           isMultiSelectMode={isMultiSelectMode}
           selectedImageIds={selectedImageIds}
+          deletingImageIds={deletingImageIds}
           onImageClick={handleImageClick}
           onImageSelect={toggleImageSelection}
           onLoadMore={() => fetchNextPage()}

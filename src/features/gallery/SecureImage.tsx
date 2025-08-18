@@ -1,4 +1,4 @@
-import { useSecureImageUrl } from '@/shared/hooks/useSignedUrls';
+import { memo, useState, useEffect } from 'react';
 import { Spinner } from '@/shared/ui/Spinner';
 
 interface SecureImageProps {
@@ -8,118 +8,182 @@ interface SecureImageProps {
   thumbnail?: boolean;
   onLoad?: () => void;
   onError?: () => void;
+  disabled?: boolean;
 }
 
-export function SecureImage({
+// Global in-memory cache to prevent any unnecessary requests
+const globalImageCache = new Map<string, { url: string; timestamp: number }>();
+
+// Stable image URL cache - prevent component re-rendering from clearing URLs
+const stableImageUrls = new Map<string, string>();
+
+
+export const SecureImage = memo(function SecureImage({
   uploadId,
   alt,
   className = '',
   thumbnail = false,
   onLoad,
   onError,
+  disabled = false,
 }: SecureImageProps) {
-  const { url, isLoading, error, processingStatus } = useSecureImageUrl(
-    uploadId,
-    thumbnail,
+  const cacheKey = `${uploadId}-${thumbnail}`;
+  
+  // Check both caches - stable cache takes priority to prevent re-renders
+  const stableUrl = stableImageUrls.get(cacheKey);
+  const cached = globalImageCache.get(cacheKey);
+  const isCacheValid = cached && Date.now() - cached.timestamp < 30 * 60 * 1000;
+  
+  // Use stable URL first, then cached URL as initial state if available
+  const [imageUrl, setImageUrl] = useState<string | null>(
+    (stableUrl && !disabled) ? stableUrl : (isCacheValid && !disabled ? cached.url : null)
   );
+  const [isLoading, setIsLoading] = useState(!isCacheValid && !disabled);
+  const [error, setError] = useState<Error | null>(null);
+  
+  useEffect(() => {
+    // Skip effect if we already have a valid imageUrl from cache
+    if (imageUrl && isCacheValid) {
+      return;
+    }
+    
+    // Double-check cache hasn't been populated since render
+    const latestCached = globalImageCache.get(cacheKey);
+    const isLatestCacheValid = latestCached && Date.now() - latestCached.timestamp < 30 * 60 * 1000;
+    
+    if (isLatestCacheValid) {
+      setImageUrl(latestCached.url);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+    
+    if (disabled || !uploadId) {
+      setImageUrl(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
 
-  // Show loading state for initial fetch or processing
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    const fetchUrl = async () => {
+      try {
+        // Get token directly from localStorage
+        const token = window.localStorage.getItem('sb-nblbokiaferczwqkrrzk-auth-token');
+        if (!token) {
+          throw new Error('No auth token');
+        }
+
+        const authData = JSON.parse(token);
+        const accessToken = authData?.access_token;
+        if (!accessToken) {
+          throw new Error('No access token');
+        }
+
+        const params = new URLSearchParams();
+        if (thumbnail) {
+          params.set('thumbnail', 'true');
+        }
+
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/v1/signed-urls/${uploadId}?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (!cancelled) {
+          // Cache the result in both caches
+          globalImageCache.set(cacheKey, {
+            url: data.url,
+            timestamp: Date.now()
+          });
+          
+          // Also store in stable cache for preventing re-render issues
+          stableImageUrls.set(cacheKey, data.url);
+          
+          // Preload the image to ensure it's in browser cache  
+          const img = new Image();
+          img.src = data.url;
+          
+          // Wait for image to load before showing it
+          img.onload = () => {
+            if (!cancelled) {
+              setImageUrl(data.url);
+              setIsLoading(false);
+            }
+          };
+          
+          img.onerror = () => {
+            if (!cancelled) {
+              setError(new Error('Failed to load image'));
+              setIsLoading(false);
+            }
+          };
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err as Error);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchUrl();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uploadId, thumbnail, disabled]);
+
+  // Show loading state for initial fetch
   if (isLoading) {
     return (
-      <div
-        className={`flex flex-col items-center justify-center bg-muted ${className}`}
-      >
+      <div className={`flex items-center justify-center bg-muted ${className}`}>
         <Spinner />
-        {processingStatus?.processing_message && (
-          <span className="text-xs text-muted-foreground mt-2 text-center px-2">
-            {processingStatus.processing_message}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  // Show processing state with progress
-  if (processingStatus && !processingStatus.ready_for_display && !error) {
-    const progress = processingStatus.processing_progress || 0;
-    const status = processingStatus.processing_status || 'pending';
-
-    return (
-      <div
-        className={`flex flex-col items-center justify-center bg-muted ${className} p-4`}
-      >
-        <div className="w-8 h-8 mb-3">
-          {status === 'processing' ? (
-            <Spinner />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-              <div className="w-4 h-4 rounded-full bg-primary/40 animate-pulse" />
-            </div>
-          )}
-        </div>
-
-        {progress > 0 && (
-          <div className="w-full max-w-[120px] mb-2">
-            <div className="h-1 bg-muted-foreground/20 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="text-center text-xs text-muted-foreground mt-1">
-              {progress}%
-            </div>
-          </div>
-        )}
-
-        <span className="text-xs text-muted-foreground text-center">
-          {processingStatus.processing_message ||
-            (status === 'pending'
-              ? 'Queued for processing...'
-              : status === 'processing'
-                ? 'Processing...'
-                : 'Preparing...')}
-        </span>
-
-        {status === 'processing' &&
-          processingStatus.processing_message?.includes('video') && (
-            <span className="text-xs text-muted-foreground/70 text-center mt-1">
-              This may take several minutes
-            </span>
-          )}
       </div>
     );
   }
 
   // Show error state
-  if (error || processingStatus?.processing_status === 'failed') {
-    const errorMessage =
-      error?.message ||
-      processingStatus?.processing_message ||
-      'Failed to load image';
-
+  if (error) {
     return (
       <div
         className={`flex flex-col items-center justify-center bg-muted text-muted-foreground ${className} p-4`}
       >
         <div className="w-8 h-8 mb-2 text-destructive">⚠️</div>
-        <span className="text-sm text-center">Processing failed</span>
+        <span className="text-sm text-center">Failed to load</span>
         <span className="text-xs text-muted-foreground/70 text-center mt-1">
-          {errorMessage}
+          {error.message}
         </span>
       </div>
     );
   }
 
   // Show image when ready
-  if (url) {
+  if (imageUrl) {
     return (
       <img
-        src={url}
+        src={imageUrl}
         alt={alt}
         className={className}
-        onLoad={onLoad}
-        onError={onError}
+        onLoad={() => {
+          onLoad?.();
+        }}
+        onError={(e) => {
+          onError?.(e);
+        }}
         loading="lazy"
       />
     );
@@ -131,4 +195,14 @@ export function SecureImage({
       <Spinner />
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison for React.memo to prevent unnecessary re-renders
+  const shouldSkipRender = (
+    prevProps.uploadId === nextProps.uploadId &&
+    prevProps.thumbnail === nextProps.thumbnail &&
+    prevProps.disabled === nextProps.disabled
+  );
+  
+  
+  return shouldSkipRender;
+});

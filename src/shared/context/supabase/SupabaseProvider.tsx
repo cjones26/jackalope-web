@@ -78,9 +78,20 @@ export const SupabaseProvider = ({
         setUser(session ? session.user : null);
         setInitialized(true);
 
-        supabase.auth.onAuthStateChange((_event, session) => {
+        supabase.auth.onAuthStateChange((event, session) => {
           setSession(session);
           setUser(session ? session.user : null);
+          
+          // Handle successful token refresh
+          if (event === 'TOKEN_REFRESHED') {
+            console.log('Token refreshed successfully');
+          } else if (event === 'SIGNED_OUT') {
+            // User signed out, clear local state and redirect
+            console.log('User signed out - redirecting to login');
+            setSession(null);
+            setUser(null);
+            router.navigate({ to: '/' });
+          }
         });
       } catch (e) {
         console.warn(e);
