@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { ProfileForm } from '@/features/profile/ProfileForm';
 import { useSupabase } from '@/shared/context/supabase';
-import { supabase } from '@/shared/services/supabase';
+import { useApi } from '@/shared/hooks/useApi';
 import { Spinner } from '@/shared/ui/Spinner';
 import { H3 } from '@/shared/ui/typography';
 
@@ -13,8 +13,9 @@ export const Route = createFileRoute('/(protected)/profile')({
 
 function RouteComponent() {
   const { user } = useSupabase();
+  const { fetchWithAuth } = useApi();
 
-  // Fetch the user profile from Supabase
+  // Fetch the user profile from backend API
   const {
     data: profile,
     isLoading,
@@ -26,16 +27,8 @@ function RouteComponent() {
         throw new Error('User not authenticated');
       }
 
-      const { data, error } = await supabase
-        .from('users')
-        .select('first_name, last_name, avatar_url')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        throw error;
-      }
-      return data;
+      const result = await fetchWithAuth('/api/v1/profile/me');
+      return result.data;
     },
     enabled: !!user?.id,
   });

@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { useSupabase } from '@/shared/context/supabase';
-import { supabase } from '@/shared/services/supabase';
+import { useApi } from '@/shared/hooks/useApi';
 import { Button } from '@/shared/ui/Button';
 import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput } from '@/shared/ui/Form/Form';
@@ -34,6 +34,7 @@ export function ProfileForm({ profile }: ProfileFormProps) {
   );
   const queryClient = useQueryClient();
   const { user } = useSupabase();
+  const { fetchWithAuth } = useApi();
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -58,32 +59,24 @@ export function ProfileForm({ profile }: ProfileFormProps) {
     setAvatarUrl(url);
   };
 
-  // Update profile in Supabase (only for name fields)
+  // Update profile via backend API
   const userMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
       if (!user) {
         throw new Error('User not authenticated');
       }
 
-      const { error } = await supabase
-        .from('users')
-        .update({
-          avatar_url: avatarUrl,
-          first_name: data.firstName,
-          last_name: data.lastName,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) {
-        throw error;
-      }
-
-      return {
-        first_name: data.firstName,
-        last_name: data.lastName,
-        avatar_url: avatarUrl,
-      };
+      return await fetchWithAuth('/api/v1/profile/me', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: data.firstName,
+          lastName: data.lastName,
+          avatarUrl: avatarUrl,
+        }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user', user?.id] });

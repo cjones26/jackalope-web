@@ -8,9 +8,7 @@ import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
-import {
-  ACCEPTED_IMAGE_TYPES,
-} from '@/shared/constants/FileConstants';
+import { ACCEPTED_FILE_TYPES } from '@/shared/constants/FileConstants';
 import { useSupabase } from '@/shared/context/supabase';
 import { ResumableUploader } from '@/shared/services/ResumableUploader';
 import { Button } from '@/shared/ui/Button';
@@ -28,16 +26,16 @@ import { Progress } from '@/shared/ui/Progress';
 import { TagInput } from '@/shared/ui/TagInput';
 import { cn } from '@/shared/ui/utils';
 
-// Define the schema for an individual image with metadata
-const imageWithMetadataSchema = z.object({
+// Define the schema for an individual item with metadata
+const itemWithMetadataSchema = z.object({
   id: z.string(),
   file: z
     .custom<File>((val) => val instanceof File, {
       message: 'Invalid file',
     })
     .refine(
-      (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
-      'Only image files are currently supported. More file types coming soon!',
+      (file) => ACCEPTED_FILE_TYPES.includes(file.type),
+      'Supported file types: images, videos, documents, and audio files',
     ),
   title: z.string().optional(),
   description: z.string().optional(),
@@ -46,15 +44,15 @@ const imageWithMetadataSchema = z.object({
 
 // Define the schema for the entire form
 const uploadFormSchema = z.object({
-  images: z
-    .array(imageWithMetadataSchema)
-    .min(1, { message: 'Please select at least one image' }),
-    // No max limit - Google Drive style unlimited uploads
+  items: z
+    .array(itemWithMetadataSchema)
+    .min(1, { message: 'Please select at least one file' }),
+  // No max limit - Google Drive style unlimited uploads
 });
 
 type UploadFormData = z.infer<typeof uploadFormSchema>;
 
-interface UnifiedImageUploadProps {
+interface UnifiedItemUploadProps {
   onSuccess: () => void;
   folderId?: string | null;
 }
@@ -67,9 +65,14 @@ interface VirtualizedFileListProps {
   handleRemoveFile: (index: number) => void;
 }
 
-function VirtualizedFileList({ fields, form, getPreviewUrl, handleRemoveFile }: VirtualizedFileListProps) {
+function VirtualizedFileList({
+  fields,
+  form,
+  getPreviewUrl,
+  handleRemoveFile,
+}: VirtualizedFileListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  
+
   const virtualizer = useVirtualizer({
     count: fields.length,
     getScrollElement: () => parentRef.current,
@@ -94,8 +97,8 @@ function VirtualizedFileList({ fields, form, getPreviewUrl, handleRemoveFile }: 
       >
         {virtualizer.getVirtualItems().map((virtualItem) => {
           const field = fields[virtualItem.index];
-          const image = form.getValues(`images.${virtualItem.index}`);
-          
+          const item = form.getValues(`items.${virtualItem.index}`);
+
           return (
             <div
               key={field.id}
@@ -112,17 +115,17 @@ function VirtualizedFileList({ fields, form, getPreviewUrl, handleRemoveFile }: 
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 rounded overflow-hidden bg-muted flex-shrink-0">
                     <img
-                      src={getPreviewUrl(image.file)}
+                      src={getPreviewUrl(item.file)}
                       alt={`Preview ${virtualItem.index}`}
                       className="w-full h-full object-cover"
                     />
                   </div>
                   <div className="flex flex-col min-w-0 flex-1">
                     <span className="text-sm font-medium truncate max-w-[200px]">
-                      {image.file.name}
+                      {item.file.name}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {(image.file.size / 1024 / 1024).toFixed(1)}MB
+                      {(item.file.size / 1024 / 1024).toFixed(1)}MB
                     </span>
                   </div>
                 </div>
@@ -147,7 +150,10 @@ function VirtualizedFileList({ fields, form, getPreviewUrl, handleRemoveFile }: 
   );
 }
 
-export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadProps) {
+export function UnifiedItemUpload({
+  onSuccess,
+  folderId,
+}: UnifiedItemUploadProps) {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -157,13 +163,13 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
   const form = useForm<UploadFormData>({
     resolver: zodResolver(uploadFormSchema),
     defaultValues: {
-      images: [],
+      items: [],
     },
   });
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
-    name: 'images',
+    name: 'items',
   });
 
   // Get preview URL for a file
@@ -212,7 +218,7 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
 
   // Handle clearing all files
   const handleClearFiles = () => {
-    form.setValue('images', []);
+    form.setValue('items', []);
   };
 
   // Open file dialog
@@ -243,22 +249,23 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
     }
   };
 
-
   // Upload mutation with Google Drive-style batch processing
   const uploadMutation = useMutation({
     mutationFn: async (data: UploadFormData) => {
       const responses = [];
-      const totalImages = data.images.length;
-      
+      const totalItems = data.items.length;
+
       // Google Drive style: Process in batches for better performance and UX
       const BATCH_SIZE = 5; // Process 5 files concurrently
       const batches = [];
-      
-      for (let i = 0; i < data.images.length; i += BATCH_SIZE) {
-        batches.push(data.images.slice(i, i + BATCH_SIZE));
+
+      for (let i = 0; i < data.items.length; i += BATCH_SIZE) {
+        batches.push(data.items.slice(i, i + BATCH_SIZE));
       }
 
-      console.log(`📦 Processing ${totalImages} files in ${batches.length} batches (${BATCH_SIZE} concurrent uploads)`);
+      console.log(
+        `📦 Processing ${totalItems} files in ${batches.length} batches (${BATCH_SIZE} concurrent uploads)`,
+      );
 
       // Initialize progress tracking
 
@@ -271,50 +278,58 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
       // Process batches sequentially, but files within each batch concurrently
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
         const batch = batches[batchIndex];
-        console.log(`📤 Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} files)`);
+        console.log(
+          `📤 Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} files)`,
+        );
 
         // Process all files in current batch concurrently
-        const batchPromises = batch.map(async (image) => {
-          
+        const batchPromises = batch.map(async (item) => {
           try {
             const uploader = new ResumableUploader(
               import.meta.env.VITE_API_URL,
               session.access_token,
             );
 
-            const result = await uploader.uploadFile(image.file, (progress) => {
+            const result = await uploader.uploadFile(item.file, (progress) => {
               // Update progress for this specific file
-              const fileProgress = (completedFiles + (progress / 100)) / totalImages * 100;
+              const fileProgress =
+                ((completedFiles + progress / 100) / totalItems) * 100;
               setUploadProgress(Math.min(fileProgress, 95));
             });
 
             if (!result.success) {
-              console.error(`Upload failed for ${image.file.name}:`, result.error);
+              console.error(
+                `Upload failed for ${item.file.name}:`,
+                result.error,
+              );
               throw new Error(result.error || 'Upload failed');
             }
 
             // If we have a folder ID, move the file to that folder
             if (folderId && result.uploadId) {
               try {
-                await fetch(`${import.meta.env.VITE_API_URL}/api/v1/folders/files/${result.uploadId}/move`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`,
+                await fetch(
+                  `${import.meta.env.VITE_API_URL}/api/v1/folders/files/${result.uploadId}/move`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${session.access_token}`,
+                    },
+                    body: JSON.stringify({ folder_id: folderId }),
                   },
-                  body: JSON.stringify({ folder_id: folderId }),
-                });
+                );
               } catch (moveError) {
                 console.warn('Failed to move file to folder:', moveError);
                 // Don't fail the entire upload if folder assignment fails
               }
             }
 
-            console.log(`✅ Completed: ${image.file.name}`);
+            console.log(`✅ Completed: ${item.file.name}`);
             completedFiles++;
             return { success: true, uploadId: result.uploadId };
           } catch (error) {
-            console.error(`❌ Failed to upload ${image.file.name}:`, error);
+            console.error(`❌ Failed to upload ${item.file.name}:`, error);
             throw error;
           }
         });
@@ -324,7 +339,7 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
         responses.push(...batchResults);
 
         // Update progress after batch completion
-        setUploadProgress((completedFiles / totalImages) * 100);
+        setUploadProgress((completedFiles / totalItems) * 100);
       }
 
       setUploadProgress(100);
@@ -333,17 +348,17 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
     onSuccess: (responses) => {
       resetForm();
 
-      const imageCount = responses.length;
-      
+      const itemCount = responses.length;
+
       // Google Drive style success message with more details for large uploads
-      if (imageCount > 10) {
+      if (itemCount > 10) {
         toast.success('🎉 Bulk Upload Complete!', {
-          description: `Successfully uploaded ${imageCount} images using batch processing`,
+          description: `Successfully uploaded ${itemCount} items using batch processing`,
           duration: 5000,
         });
       } else {
         toast.success('Upload Complete!', {
-          description: `Successfully uploaded ${imageCount} ${imageCount === 1 ? 'image' : 'images'}`,
+          description: `Successfully uploaded ${itemCount} ${itemCount === 1 ? 'item' : 'items'}`,
         });
       }
 
@@ -359,12 +374,12 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
     },
     (errors) => {
       console.error('❌ Form validation errors:', errors);
-    }
+    },
   );
 
   // Reset form state
   const resetForm = () => {
-    form.reset({ images: [] });
+    form.reset({ items: [] });
     setUploadProgress(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -411,28 +426,29 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
                 ref={fileInputRef}
                 onChange={(e) => handleFilesSelected(e.target.files)}
                 multiple
-                accept={ACCEPTED_IMAGE_TYPES.join(',')}
+                accept={ACCEPTED_FILE_TYPES.join(',')}
                 className="hidden"
               />
               <div className="flex flex-col items-center justify-center gap-3">
                 <Upload className="h-12 w-12 text-muted-foreground" />
                 <div className="space-y-2">
                   <p className="text-lg font-medium">
-                    Drag & drop images here or click to browse
+                    Drag & drop files here or click to browse
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Upload any number of images, no size limits
+                    Upload any number of files, no size limits
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Single image: full metadata editing • Multiple images: quick upload
+                    Single item: full metadata editing • Multiple items: quick
+                    upload
                   </p>
                 </div>
               </div>
             </div>
 
-            {form.formState.errors.images?.message && (
+            {form.formState.errors.items?.message && (
               <p className="text-sm text-destructive mt-2">
-                {form.formState.errors.images.message}
+                {form.formState.errors.items.message}
               </p>
             )}
           </div>
@@ -472,9 +488,9 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
             {/* Metadata form */}
             <Card>
               <CardHeader>
-                <CardTitle>Image Details</CardTitle>
+                <CardTitle>Item Details</CardTitle>
                 <CardDescription>
-                  Add optional metadata for your image
+                  Add optional metadata for your item
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -488,23 +504,23 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
                 <div className="space-y-3">
                   <FormField
                     control={form.control}
-                    name="images.0.title"
+                    name="items.0.title"
                     render={({ field }) => (
                       <FormInput
                         type="text"
                         label="Title"
-                        placeholder="Image title (optional)"
+                        placeholder="Item title (optional)"
                         {...field}
                       />
                     )}
                   />
                   <FormField
                     control={form.control}
-                    name="images.0.description"
+                    name="items.0.description"
                     render={({ field }) => (
                       <FormTextarea
                         label="Description"
-                        placeholder="Image description (optional)"
+                        placeholder="Item description (optional)"
                         className="min-h-20"
                         {...field}
                       />
@@ -512,7 +528,7 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
                   />
                   <FormField
                     control={form.control}
-                    name="images.0.tags"
+                    name="items.0.tags"
                     render={({ field }) => (
                       <div className="space-y-1.5">
                         <label className="text-sm font-medium">Tags</label>
@@ -533,23 +549,25 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
         {/* Multiple files - Imgur-style simple interface */}
         {isMultipleFiles && (
           <div className="space-y-6">
-            {/* Hidden FormFields to register all images with react-hook-form */}
+            {/* Hidden FormFields to register all items with react-hook-form */}
             <div className="hidden">
               {fields.map((field, index) => (
                 <div key={field.id}>
                   <FormField
                     control={form.control}
-                    name={`images.${index}.title`}
-                    render={({ field: titleField }) => <input {...titleField} />}
+                    name={`items.${index}.title`}
+                    render={({ field: titleField }) => (
+                      <input {...titleField} />
+                    )}
                   />
                   <FormField
                     control={form.control}
-                    name={`images.${index}.description`}
+                    name={`items.${index}.description`}
                     render={({ field: descField }) => <input {...descField} />}
                   />
                   <FormField
                     control={form.control}
-                    name={`images.${index}.tags`}
+                    name={`items.${index}.tags`}
                     render={({ field: tagsField }) => <input {...tagsField} />}
                   />
                 </div>
@@ -564,10 +582,16 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
                 </div>
                 <div>
                   <p className="text-lg font-semibold">
-                    {fields.length} images ready to upload
+                    {fields.length} items ready to upload
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Total size: {(fields.reduce((sum, field) => sum + field.file.size, 0) / 1024 / 1024).toFixed(1)}MB
+                    Total size:{' '}
+                    {(
+                      fields.reduce((sum, field) => sum + field.file.size, 0) /
+                      1024 /
+                      1024
+                    ).toFixed(1)}
+                    MB
                   </p>
                 </div>
               </div>
@@ -594,7 +618,7 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
             </div>
 
             {/* Virtualized file list for performance with large uploads */}
-            <VirtualizedFileList 
+            <VirtualizedFileList
               fields={fields}
               form={form}
               getPreviewUrl={getPreviewUrl}
@@ -603,11 +627,13 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
 
             <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
               <p className="text-sm text-blue-700">
-                💡 <strong>Quick Upload:</strong> Multiple images will be uploaded without individual metadata. 
-                You can edit titles, descriptions, and tags after upload if needed.
+                💡 <strong>Quick Upload:</strong> Multiple items will be
+                uploaded without individual metadata. You can edit titles,
+                descriptions, and tags after upload if needed.
                 {fields.length > 100 && (
                   <span className="block mt-1">
-                    ⚡ Using virtualized rendering for optimal performance with {fields.length} files.
+                    ⚡ Using virtualized rendering for optimal performance with{' '}
+                    {fields.length} files.
                   </span>
                 )}
               </p>
@@ -621,7 +647,7 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
           ref={fileInputRef}
           onChange={(e) => handleFilesSelected(e.target.files)}
           multiple
-          accept={ACCEPTED_IMAGE_TYPES.join(',')}
+          accept={ACCEPTED_FILE_TYPES.join(',')}
           className="hidden"
         />
 
@@ -630,10 +656,9 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>
-                {fields.length > 10 
-                  ? `Processing ${fields.length} images in batches...` 
-                  : 'Uploading images...'
-                }
+                {fields.length > 10
+                  ? `Processing ${fields.length} items in batches...`
+                  : 'Uploading items...'}
               </span>
               <span>{Math.round(uploadProgress)}%</span>
             </div>
@@ -662,13 +687,13 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
               className="gap-1"
               size="lg"
               onClick={() => {
-                console.log('🔘 Upload button clicked!', { 
-                  filesLength: fields.length, 
-                  isNoFiles, 
-                  isSingleFile, 
+                console.log('🔘 Upload button clicked!', {
+                  filesLength: fields.length,
+                  isNoFiles,
+                  isSingleFile,
                   isMultipleFiles,
                   formState: form.formState,
-                  formErrors: form.formState.errors
+                  formErrors: form.formState.errors,
                 });
               }}
             >
@@ -677,7 +702,8 @@ export function UnifiedImageUpload({ onSuccess, folderId }: UnifiedImageUploadPr
               ) : (
                 <>
                   <Upload className="h-4 w-4" />
-                  Upload {fields.length} {fields.length === 1 ? 'Image' : 'Images'}
+                  Upload {fields.length}{' '}
+                  {fields.length === 1 ? 'Item' : 'Items'}
                 </>
               )}
             </Button>

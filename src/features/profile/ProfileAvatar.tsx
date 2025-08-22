@@ -2,11 +2,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as faceapi from 'face-api.js';
 import { Camera, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 
 import DefaultAvatar from '@/assets/default-avatar.jpg';
 import { useSupabase } from '@/shared/context/supabase';
-import { supabase } from '@/shared/services/supabase';
+import { useApi } from '@/shared/hooks/useApi';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/Avatar';
 import { Button } from '@/shared/ui/Button';
 import { Spinner } from '@/shared/ui/Spinner';
@@ -36,6 +35,7 @@ export function ProfileAvatar({
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const { user } = useSupabase();
+  const { fetchWithAuth } = useApi();
   const queryClient = useQueryClient();
 
   // Load face detection models on component mount
@@ -66,28 +66,21 @@ export function ProfileAvatar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Upload image to Supabase storage
+  // Upload image via backend API
   const uploadImage = async (file: File): Promise<string> => {
     if (!user?.id) {
       throw new Error('User not authenticated');
     }
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${uuidv4()}.${fileExt}`;
-    const filePath = `${user.id}/${fileName}`;
+    const formData = new FormData();
+    formData.append('file', file);
 
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file);
+    const result = await fetchWithAuth('/api/v1/profile/avatar/upload', {
+      method: 'POST',
+      body: formData,
+    });
 
-    if (uploadError) {
-      throw uploadError;
-    }
-
-    // Get public URL
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-
-    return data.publicUrl;
+    return result.data.url;
   };
 
   // Process and crop image with face detection
@@ -155,7 +148,20 @@ export function ProfileAvatar({
               });
             } catch (error) {
               console.error('Upload error:', error);
-              setUploadError('Failed to upload image');
+
+              // Extract user-friendly error message
+              let errorMessage = 'Failed to upload image';
+              if (error && typeof error === 'object' && 'message' in error) {
+                errorMessage = error.message as string;
+              } else if (
+                error &&
+                typeof error === 'object' &&
+                'statusText' in error
+              ) {
+                errorMessage = `Upload failed: ${error.statusText}`;
+              }
+
+              setUploadError(errorMessage);
             } finally {
               setIsUploading(false);
             }
@@ -239,9 +245,33 @@ export function ProfileAvatar({
     }
 
     const file = files[0];
+
+    // Validate file type on frontend
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError(
+        `File type "${file.type}" is not supported. Please upload a JPEG, PNG, or WebP image.`,
+      );
+      e.target.value = ''; // Clear the input
+      return;
+    }
+
+    // Validate file size on frontend (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      const fileSizeMB = Math.round((file.size / (1024 * 1024)) * 100) / 100;
+      setUploadError(
+        `File size (${fileSizeMB}MB) exceeds the 10MB limit. Please choose a smaller image.`,
+      );
+      e.target.value = ''; // Clear the input
+      return;
+    }
+
+    // Clear any previous errors
+    setUploadError(null);
+
     const tempUrl = URL.createObjectURL(file);
     setIsUploading(true);
-    setUploadError(null);
 
     try {
       // Create a temporary image element to load the file
@@ -294,84 +324,10 @@ export function ProfileAvatar({
         setPreviewUrl(null);
       }
 
-      // Delete the image file from storage if it exists
-      if (avatarUrl) {
-        try {
-          console.log('Attempting to delete avatar from URL:', avatarUrl);
-
-          // Look for the pattern userId/filename.ext in the URL
-          const match = avatarUrl.match(/\/([^/]+)\/([^/]+)$/);
-          if (match && match.length === 3) {
-            const userId = match[1]; // First capture group - userId
-            const fileName = match[2]; // Second capture group - fileName
-
-            console.log(`Extracted userId: ${userId}, fileName: ${fileName}`);
-
-            // Construct the storage path as Supabase expects it
-            // When using .remove(), we need to provide the full path INCLUDING userId/fileName
-            const storagePath = `${userId}/${fileName}`;
-
-            console.log('Attempting to remove file at path:', storagePath);
-
-            const { error: deleteError } = await supabase.storage
-              .from('avatars') // Always use 'avatars' as the bucket
-              .remove([storagePath]);
-
-            if (deleteError) {
-              console.error('Error deleting avatar from storage:', deleteError);
-            } else {
-              console.log('Successfully deleted avatar file');
-            }
-          } else {
-            console.warn(
-              'Could not extract userId/fileName pattern from URL:',
-              avatarUrl,
-            );
-
-            // Fallback: List and delete all files in user's folder
-            console.log(`Listing all files in user folder: ${user.id}`);
-
-            const { data: files, error: listError } = await supabase.storage
-              .from('avatars')
-              .list(user.id);
-
-            if (listError) {
-              console.error('Error listing files:', listError);
-            } else if (files && files.length > 0) {
-              console.log('Found files to delete:', files);
-
-              const filePaths = files.map((file) => `${user.id}/${file.name}`);
-
-              const { error: deleteError } = await supabase.storage
-                .from('avatars')
-                .remove(filePaths);
-
-              if (deleteError) {
-                console.error('Error deleting files:', deleteError);
-              } else {
-                console.log('Successfully deleted all files in user folder');
-              }
-            } else {
-              console.log('No files found in user folder');
-            }
-          }
-        } catch (error) {
-          console.error('Error during file deletion:', error);
-        }
-      }
-
-      // Update profile in database with null avatar_url
-      const { error } = await supabase
-        .from('users')
-        .update({
-          avatar_url: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) {
-        throw error;
-      }
+      // Delete avatar via backend API
+      await fetchWithAuth('/api/v1/profile/avatar', {
+        method: 'DELETE',
+      });
 
       // Notify parent component
       if (onAvatarChange) {
@@ -464,11 +420,16 @@ export function ProfileAvatar({
         <canvas ref={canvasRef} />
       </div>
 
-      <span className="text-sm text-muted-foreground pt-4">
-        {!displayUrl
-          ? 'Click to upload a profile photo'
-          : 'Click to change profile photo'}
-      </span>
+      <div className="text-center pt-4">
+        <span className="text-sm text-muted-foreground block">
+          {!displayUrl
+            ? 'Click to upload a profile photo'
+            : 'Click to change profile photo'}
+        </span>
+        <span className="text-xs text-muted-foreground/70">
+          Supports JPEG, PNG, and WebP images (max 10MB)
+        </span>
+      </div>
     </div>
   );
 }

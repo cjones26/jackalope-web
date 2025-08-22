@@ -81,7 +81,7 @@ export const SupabaseProvider = ({
         supabase.auth.onAuthStateChange((event, session) => {
           setSession(session);
           setUser(session ? session.user : null);
-          
+
           // Handle successful token refresh
           if (event === 'TOKEN_REFRESHED') {
             console.log('Token refreshed successfully');

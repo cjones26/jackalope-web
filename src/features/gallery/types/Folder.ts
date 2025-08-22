@@ -8,7 +8,7 @@ export interface Folder {
   updated_at: string;
 }
 
-import { GalleryImage } from './GalleryImage';
+import { GalleryItem as GalleryImage } from './GalleryItem';
 
 export interface PaginationMetadata {
   page: number;

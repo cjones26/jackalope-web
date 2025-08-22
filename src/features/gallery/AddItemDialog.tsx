@@ -9,21 +9,21 @@ import {
   DialogTitle,
 } from '@/shared/ui/Dialog';
 
-import { UnifiedImageUpload } from './UnifiedImageUpload';
+import { UnifiedItemUpload } from './UnifiedItemUpload';
 
-interface AddImageDialogProps {
+interface AddItemDialogProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
   folderId?: string | null;
 }
 
-export function AddImageDialog({
+export function AddItemDialog({
   open,
   onClose,
   onSuccess,
   folderId,
-}: AddImageDialogProps) {
+}: AddItemDialogProps) {
   // Handle dialog close
   const handleClose = () => {
     onClose();
@@ -33,9 +33,9 @@ export function AddImageDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Image(s)</DialogTitle>
+          <DialogTitle>Add Item(s)</DialogTitle>
           <DialogDescription>
-            Upload one or more images to your gallery. Drag and drop multiple
+            Upload one or more items to your gallery. Drag and drop multiple
             files or select them individually.
           </DialogDescription>
           <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
@@ -44,7 +44,7 @@ export function AddImageDialog({
           </DialogClose>
         </DialogHeader>
 
-        <UnifiedImageUpload onSuccess={onSuccess} folderId={folderId} />
+        <UnifiedItemUpload onSuccess={onSuccess} folderId={folderId} />
       </DialogContent>
     </Dialog>
   );

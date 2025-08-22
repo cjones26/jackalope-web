@@ -1,7 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-
-import { SecureImage } from './SecureImage';
 import {
   AlertCircle,
   ChevronLeft,
@@ -15,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import { GalleryImage } from '@/features/gallery/types/GalleryImage';
+import { GalleryItem as GalleryImage } from '@/features/gallery/types/GalleryItem';
 import { useApi } from '@/shared/hooks/useApi';
 import { Alert, AlertDescription, AlertTitle } from '@/shared/ui/Alert';
 import {
@@ -32,6 +30,8 @@ import { Button } from '@/shared/ui/Button';
 import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput, FormTextarea } from '@/shared/ui/Form/Form';
 import { TagInput } from '@/shared/ui/TagInput';
+
+import { SecureImage } from './SecureImage';
 
 const imageEditSchema = z.object({
   title: z.string().optional(),

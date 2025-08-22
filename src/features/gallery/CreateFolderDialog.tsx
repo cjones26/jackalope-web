@@ -18,7 +18,10 @@ import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput } from '@/shared/ui/Form/Form';
 
 const createFolderSchema = z.object({
-  name: z.string().min(1, 'Folder name is required').max(100, 'Folder name too long'),
+  name: z
+    .string()
+    .min(1, 'Folder name is required')
+    .max(100, 'Folder name too long'),
 });
 
 type CreateFolderData = z.infer<typeof createFolderSchema>;
@@ -30,7 +33,12 @@ interface CreateFolderDialogProps {
   parentId: string | null;
 }
 
-export function CreateFolderDialog({ open, onClose, onSuccess, parentId }: CreateFolderDialogProps) {
+export function CreateFolderDialog({
+  open,
+  onClose,
+  onSuccess,
+  parentId,
+}: CreateFolderDialogProps) {
   const { fetchWithAuth } = useApi();
 
   const form = useForm<CreateFolderData>({
@@ -81,7 +89,9 @@ export function CreateFolderDialog({ open, onClose, onSuccess, parentId }: Creat
         <DialogHeader>
           <DialogTitle>Create New Folder</DialogTitle>
           <DialogDescription>
-            {parentId ? 'Create a new subfolder' : 'Create a new folder in the root directory'}
+            {parentId
+              ? 'Create a new subfolder'
+              : 'Create a new folder in the root directory'}
           </DialogDescription>
         </DialogHeader>
 
@@ -100,19 +110,18 @@ export function CreateFolderDialog({ open, onClose, onSuccess, parentId }: Creat
             />
 
             <DialogFooter>
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={handleClose}
                 disabled={createFolderMutation.isPending}
               >
                 Cancel
               </Button>
-              <Button 
-                type="submit" 
-                disabled={createFolderMutation.isPending}
-              >
-                {createFolderMutation.isPending ? 'Creating...' : 'Create Folder'}
+              <Button type="submit" disabled={createFolderMutation.isPending}>
+                {createFolderMutation.isPending
+                  ? 'Creating...'
+                  : 'Create Folder'}
               </Button>
             </DialogFooter>
           </form>

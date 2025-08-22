@@ -13,6 +13,9 @@
     font-family:
       apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
       sans-serif;
+    
+    /* Prevent layout shift when scrollbars appear/disappear */
+    scrollbar-gutter: stable;
   }
 }
 

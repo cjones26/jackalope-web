@@ -1,27 +1,9 @@
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useInfiniteQuery,
-} from '@tanstack/react-query';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { FolderPlus, Plus, Trash, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-
-import { AddImageDialog } from '@/features/gallery/AddImageDialog';
-import { CreateFolderDialog } from '@/features/gallery/CreateFolderDialog';
-import { FolderBreadcrumbs } from '@/features/gallery/FolderBreadcrumbs';
-import { FolderGrid } from '@/features/gallery/FolderGrid';
-import { ImageDetails } from '@/features/gallery/ImageDetails';
-import { VirtualizedInfiniteGallery } from '@/features/gallery/VirtualizedInfiniteGallery';
-import { GalleryImage } from '@/features/gallery/types/GalleryImage';
-import {
-  BreadcrumbItem,
-  FolderContentsResponse,
-} from '@/features/gallery/types/Folder';
-import { Profile } from '@/shared/context/api/types/Profile';
+import { useSupabase } from '@/shared/context/supabase';
 import { ApiError, useApi } from '@/shared/hooks/useApi';
 import {
   AlertDialog,
@@ -33,61 +15,58 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/shared/ui/AlertDialog';
-import { Button } from '@/shared/ui/Button';
-import { Spinner } from '@/shared/ui/Spinner';
-import { H3 } from '@/shared/ui/typography';
 
-export const Route = createFileRoute('/(protected)/gallery')({
-  component: RouteComponent,
-  validateSearch: (search: Record<string, unknown>) => ({
-    folderId: (search.folderId as string) || null,
-  }),
-});
+import { AddItemDialog } from './AddItemDialog';
+import { CreateFolderDialog } from './CreateFolderDialog';
+import { FolderTreeView } from './FolderTreeView';
+import { GalleryContent } from './GalleryContent';
+import { ImageDetails } from './ImageDetails';
+import { BreadcrumbItem, FolderContentsResponse } from './types/Folder';
+import { GalleryItem as GalleryImage } from './types/GalleryItem';
 
 interface DeleteResponse {
   deletedCount: number;
   success: boolean;
 }
 
-// Define breakpoints for responsive design
-const BREAKPOINTS = {
-  sm: 640, // 1 column
-  md: 768, // 2 columns
-  lg: 1024, // 3 columns
-  xl: 1280, // 4 columns
-  '2xl': 1536, // 5 columns
-};
-
 // Create a context to manage selectedImage without causing re-renders
 const useSelectedImageManager = () => {
-  const [selectedImage, setSelectedImageState] = useState<GalleryImage | null>(null);
-  
+  const [selectedImage, setSelectedImageState] = useState<GalleryImage | null>(
+    null,
+  );
+
   const setSelectedImage = useCallback((image: GalleryImage | null) => {
     setSelectedImageState(image);
   }, []);
-  
+
   return { selectedImage, setSelectedImage };
 };
 
-function RouteComponent() {
+interface GalleryPageProps {
+  folderId: string | null;
+}
+
+export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
   const { fetchWithAuth } = useApi();
-  
+  const { user } = useSupabase();
+
   const navigate = useNavigate();
-  const { folderId: currentFolderId } = Route.useSearch();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const { selectedImage, setSelectedImage } = useSelectedImageManager();
   const queryClient = useQueryClient();
-  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number>(-1);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([
+    { id: 'home', name: 'Home', path: 'Home' },
+  ]);
   const [deletingImageIds, setDeletingImageIds] = useState<string[]>([]);
   // Fixed 5 columns for denser grid
   const columnCount = 5;
 
   const [itemsPerPage] = useState(50); // Good balance for performance
-  
+
   // CUSTOM INFINITE SCROLL IMPLEMENTATION - Bypassing React Query completely
   const [customFolderData, setCustomFolderData] = useState<{
     folders: FolderContentsResponse['folders'];
@@ -105,71 +84,84 @@ function RouteComponent() {
 
   // Stable folder contents reference - only changes when actual data changes
   const folderContents = useMemo(() => {
-    if (!customFolderData) return null;
+    if (!customFolderData) {
+      return null;
+    }
     return customFolderData;
-  }, [customFolderData?.files, customFolderData?.folders, customFolderData?.total_items]);
+  }, [
+    customFolderData?.files,
+    customFolderData?.folders,
+    customFolderData?.total_items,
+  ]);
 
   // Function to fetch a specific page
-  const fetchPage = useCallback(async (page: number) => {
-    const endpoint = currentFolderId
-      ? `/api/v1/folders/${currentFolderId}/contents`
-      : '/api/v1/folders/root/contents';
+  const fetchPage = useCallback(
+    async (page: number) => {
+      const endpoint = currentFolderId
+        ? `/api/v1/folders/${currentFolderId}/contents`
+        : '/api/v1/folders/root/contents';
 
-    const params = new URLSearchParams({
-      page: page.toString(),
-      limit: itemsPerPage.toString(),
-    });
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: itemsPerPage.toString(),
+      });
 
-    const result = await fetchWithAuth(`${endpoint}?${params}`);
-    return result;
-  }, [currentFolderId, itemsPerPage]);
+      const result = await fetchWithAuth(`${endpoint}?${params}`);
+      return result;
+    },
+    [currentFolderId, itemsPerPage, fetchWithAuth],
+  );
 
   // Function to fetch next page
   const fetchNextPage = useCallback(async () => {
-    if (!hasNextPage || isFetchingNextPage) return;
-    
+    if (!hasNextPage || isFetchingNextPage) {
+      return;
+    }
+
     setIsFetchingNextPage(true);
     try {
       const nextPage = currentPageRef.current + 1;
       const newPageData = await fetchPage(nextPage);
-      
+
       // Handle case where fetchPage returns undefined (auth failure)
       if (!newPageData) {
         return;
       }
-      
+
       // Add to our pages array
       allPagesRef.current.push(newPageData);
       currentPageRef.current = nextPage;
-      
+
       // Flatten all pages and update state with stable reference
       const allFolders: FolderContentsResponse['folders'] = [];
       const allFiles: GalleryImage[] = [];
-      
+
       allPagesRef.current.forEach((page) => {
         allFolders.push(...(page.folders || []));
         allFiles.push(...(page.files || []));
       });
-      
+
       const newData = {
         folders: allFolders,
         files: allFiles,
         pagination: newPageData.pagination,
         total_items: allPagesRef.current[0]?.pagination?.total_items || 0,
       };
-      
-      setCustomFolderData(prevData => {
+
+      setCustomFolderData((prevData) => {
         // Compare content to prevent unnecessary updates
-        if (prevData && 
-            prevData.total_items === newData.total_items &&
-            prevData.files.length === newData.files.length &&
-            prevData.folders.length === newData.folders.length &&
-            prevData.files[0]?._id === newData.files[0]?._id) {
+        if (
+          prevData &&
+          prevData.total_items === newData.total_items &&
+          prevData.files.length === newData.files.length &&
+          prevData.folders.length === newData.folders.length &&
+          prevData.files[0]?._id === newData.files[0]?._id
+        ) {
           return prevData;
         }
         return newData;
       });
-      
+
       setHasNextPage(!!newPageData.pagination?.has_next);
     } catch (err) {
       console.error('Error fetching next page:', err);
@@ -188,13 +180,13 @@ function RouteComponent() {
       setError(null);
       currentPageRef.current = 1;
       allPagesRef.current = [];
-      
+
       try {
         const initialPageData = await fetchPage(1);
-        
+
         // Set up our pages array
         allPagesRef.current = [initialPageData];
-        
+
         // Set initial data with stable reference - only update if different
         const newData = {
           folders: initialPageData.folders || [],
@@ -202,19 +194,21 @@ function RouteComponent() {
           pagination: initialPageData.pagination,
           total_items: initialPageData.pagination?.total_items || 0,
         };
-        
-        setCustomFolderData(prevData => {
+
+        setCustomFolderData((prevData) => {
           // Compare content to prevent unnecessary updates
-          if (prevData && 
-              prevData.total_items === newData.total_items &&
-              prevData.files.length === newData.files.length &&
-              prevData.folders.length === newData.folders.length &&
-              prevData.files[0]?._id === newData.files[0]?._id) {
+          if (
+            prevData &&
+            prevData.total_items === newData.total_items &&
+            prevData.files.length === newData.files.length &&
+            prevData.folders.length === newData.folders.length &&
+            prevData.files[0]?._id === newData.files[0]?._id
+          ) {
             return prevData;
           }
           return newData;
         });
-        
+
         setHasNextPage(!!initialPageData.pagination?.has_next);
       } catch (err) {
         setIsError(true);
@@ -227,14 +221,25 @@ function RouteComponent() {
     loadInitialData();
   }, [currentFolderId, fetchPage]);
 
-
   // Fetch profile data
   const { data: profileData, isLoading: isProfileLoading } = useQuery<
-    Profile,
+    {
+      first_name: string | null;
+      last_name: string | null;
+      avatar_url: string | null;
+    },
     ApiError
   >({
-    queryKey: ['profile'],
-    queryFn: () => fetchWithAuth('/api/v1/profile'),
+    queryKey: ['user', user?.id],
+    queryFn: async () => {
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+
+      const result = await fetchWithAuth('/api/v1/profile/me');
+      return result.data;
+    },
+    enabled: !!user?.id,
     staleTime: 30 * 60 * 1000, // 30 minutes - profile rarely changes
   });
 
@@ -243,15 +248,25 @@ function RouteComponent() {
     queryKey: ['folder-breadcrumbs', currentFolderId],
     staleTime: 10 * 60 * 1000, // 10 minutes - folder structure rarely changes
     queryFn: async () => {
-      if (!currentFolderId) return [];
-
       const breadcrumbs: BreadcrumbItem[] = [];
+
+      // Always start with Home
+      breadcrumbs.push({
+        id: 'home',
+        name: 'Home',
+        path: 'Home',
+      });
+
+      if (!currentFolderId) {
+        return breadcrumbs;
+      }
+
       let folderId = currentFolderId;
 
       // Walk up the parent chain to build breadcrumbs
       while (folderId) {
         const folder = await fetchWithAuth(`/api/v1/folders/${folderId}`);
-        breadcrumbs.unshift({
+        breadcrumbs.push({
           id: folder.folder.id,
           name: folder.folder.name,
           path: folder.folder.path || folder.folder.name,
@@ -261,7 +276,6 @@ function RouteComponent() {
 
       return breadcrumbs;
     },
-    enabled: !!currentFolderId,
   });
 
   // Update breadcrumbs when data changes
@@ -277,26 +291,21 @@ function RouteComponent() {
     return filtered;
   }, [folderContents?.files, deletingImageIds]);
 
-  const folderData = useMemo(
-    () => folderContents?.folders || [],
-    [folderContents?.folders],
+  const handleNavigateTo = useCallback(
+    (folderId: string | null) => {
+      if (folderId === null || folderId === 'home') {
+        navigate({
+          to: '/gallery',
+        });
+      } else {
+        navigate({
+          to: '/gallery/$folderId',
+          params: { folderId },
+        });
+      }
+    },
+    [navigate],
   );
-
-
-  // Handle folder navigation
-  const handleFolderClick = useCallback((folderId: string) => {
-    navigate({
-      to: '/gallery',
-      search: { folderId },
-    });
-  }, [navigate]);
-
-  const handleNavigateTo = useCallback((folderId: string | null) => {
-    navigate({
-      to: '/gallery',
-      search: { folderId },
-    });
-  }, [navigate]);
 
   const handleCreateFolder = useCallback(() => {
     // Refresh the custom data by re-fetching
@@ -305,26 +314,25 @@ function RouteComponent() {
         const refreshedData = await fetchPage(1);
         allPagesRef.current = [refreshedData];
         currentPageRef.current = 1;
-        
+
         setCustomFolderData({
           folders: refreshedData.folders || [],
           files: refreshedData.files || [],
           pagination: refreshedData.pagination,
           total_items: refreshedData.pagination?.total_items || 0,
         });
-        
+
         setHasNextPage(!!refreshedData.pagination?.has_next);
       } catch (err) {
         console.error('Error refreshing data:', err);
       }
     };
-    
+
     refreshData();
     setIsCreateFolderOpen(false);
   }, [fetchPage]);
 
   const handleImageAdded = useCallback(() => {
-
     // Clear all signed URL related queries to ensure fresh URLs
     queryClient.removeQueries({ queryKey: ['signed-url'] });
     queryClient.removeQueries({ queryKey: ['bulk-signed-urls'] });
@@ -335,45 +343,45 @@ function RouteComponent() {
         const refreshedData = await fetchPage(1);
         allPagesRef.current = [refreshedData];
         currentPageRef.current = 1;
-        
+
         setCustomFolderData({
           folders: refreshedData.folders || [],
           files: refreshedData.files || [],
           pagination: refreshedData.pagination,
           total_items: refreshedData.pagination?.total_items || 0,
         });
-        
+
         setHasNextPage(!!refreshedData.pagination?.has_next);
       } catch (err) {
         console.error('Error refreshing data:', err);
       }
     };
-    
+
     refreshData();
     setIsAddDialogOpen(false);
   }, [queryClient, fetchPage]);
 
   const handleImageUpdated = useCallback(
     (deletedImageId: string | undefined) => {
-      
       if (deletedImageId) {
         // Optimistically remove the image from custom data
-        setCustomFolderData(prevData => {
-          if (!prevData) return prevData;
-          
+        setCustomFolderData((prevData) => {
+          if (!prevData) {
+            return prevData;
+          }
+
           const newData = {
             ...prevData,
-            files: prevData.files.filter(file => file._id !== deletedImageId),
+            files: prevData.files.filter((file) => file._id !== deletedImageId),
           };
-          
-          
+
           return newData;
         });
-        
+
         // Also update the pages refs to keep them in sync
-        allPagesRef.current = allPagesRef.current.map(page => ({
+        allPagesRef.current = allPagesRef.current.map((page) => ({
           ...page,
-          files: page.files.filter(file => file._id !== deletedImageId),
+          files: page.files.filter((file) => file._id !== deletedImageId),
         }));
 
         // Remove signed URL cache entries for the deleted image
@@ -383,49 +391,174 @@ function RouteComponent() {
         });
       }
 
-        setSelectedImage(null);
+      setSelectedImage(null);
     },
-    [queryClient],
+    [queryClient, setSelectedImage],
   );
 
-  const toggleMultiSelectMode = useCallback(() => {
-    if (isMultiSelectMode) {
-      setSelectedImageIds([]);
-    }
-    setIsMultiSelectMode(!isMultiSelectMode);
-  }, [isMultiSelectMode]);
+  // Clear selections when folder changes
+  useEffect(() => {
+    setSelectedImageIds([]);
+    setLastSelectedIndex(-1);
+  }, [currentFolderId]);
 
-  const toggleImageSelection = useCallback((
-    imageId: string,
-    event: React.MouseEvent | MouseEvent,
-  ) => {
-    if (event) {
-      event.stopPropagation();
-    }
-    setSelectedImageIds((prev) => {
-      if (prev.includes(imageId)) {
-        return prev.filter((id) => id !== imageId);
-      } else {
-        return [...prev, imageId];
+  const toggleImageSelection = useCallback(
+    (imageId: string, event: React.MouseEvent | MouseEvent) => {
+      if (event) {
+        event.stopPropagation();
       }
-    });
-  }, []);
 
-  const handleImageClick = useCallback((image: GalleryImage, event?: React.MouseEvent) => {
-    if (isMultiSelectMode) {
-      toggleImageSelection(image._id, event || new MouseEvent('click'));
-    } else {
+      const currentIndex = imageData.findIndex((img) => img._id === imageId);
+
+      if ((event as React.MouseEvent).shiftKey && lastSelectedIndex >= 0) {
+        // Range selection with Shift+click
+        const start = Math.min(lastSelectedIndex, currentIndex);
+        const end = Math.max(lastSelectedIndex, currentIndex);
+        const rangeIds = imageData.slice(start, end + 1).map((img) => img._id);
+
+        setSelectedImageIds((prev) => {
+          const newSelection = new Set([...prev, ...rangeIds]);
+          return Array.from(newSelection);
+        });
+      } else {
+        // Toggle single selection
+        setSelectedImageIds((prev) => {
+          if (prev.includes(imageId)) {
+            return prev.filter((id) => id !== imageId);
+          } else {
+            return [...prev, imageId];
+          }
+        });
+        setLastSelectedIndex(currentIndex);
+      }
+    },
+    [imageData, lastSelectedIndex],
+  );
+
+  const handleImageClick = useCallback(
+    (image: GalleryImage) => {
+      // Double-click now opens the image viewer
       setSelectedImage(image);
-    }
-  }, [isMultiSelectMode, toggleImageSelection]);
-
-  const selectAllImages = () => {
-    setSelectedImageIds(imageData.map((img) => img._id));
-  };
+    },
+    [setSelectedImage],
+  );
 
   const clearSelections = () => {
     setSelectedImageIds([]);
+    setLastSelectedIndex(-1);
   };
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === 'Delete' && selectedImageIds.length > 0) {
+        event.preventDefault();
+        setIsDeleteDialogOpen(true);
+      }
+    },
+    [selectedImageIds.length],
+  );
+
+  const handleFileDrop = useCallback(
+    async (draggedFileIds: string[], targetFolderId: string | null) => {
+      try {
+        // Optimistically remove the moved images from the current view
+        setCustomFolderData((prevData) => {
+          if (!prevData) {
+            return prevData;
+          }
+
+          const newData = {
+            ...prevData,
+            files: prevData.files.filter(
+              (file) => !draggedFileIds.includes(file._id),
+            ),
+          };
+
+          return newData;
+        });
+
+        // Also update the pages refs to keep them in sync
+        allPagesRef.current = allPagesRef.current.map((page) => ({
+          ...page,
+          files: page.files.filter(
+            (file) => !draggedFileIds.includes(file._id),
+          ),
+        }));
+
+        // Clear selections immediately since files are being moved
+        setSelectedImageIds([]);
+        setLastSelectedIndex(-1);
+
+        // Move each file to the target folder
+        for (const fileId of draggedFileIds) {
+          await fetchWithAuth(`/api/v1/folders/files/${fileId}/move`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              folder_id: targetFolderId,
+            }),
+          });
+        }
+
+        // Clear any cached queries that might be affected
+        queryClient.removeQueries({ queryKey: ['signed-url'] });
+        queryClient.removeQueries({ queryKey: ['bulk-signed-urls'] });
+
+        // Remove signed URL cache entries for moved images
+        draggedFileIds.forEach((fileId) => {
+          queryClient.removeQueries({
+            queryKey: ['signed-url', fileId],
+            exact: false,
+          });
+        });
+
+        // Refresh the current folder data
+        const refreshedData = await fetchPage(1);
+        allPagesRef.current = [refreshedData];
+        currentPageRef.current = 1;
+
+        setCustomFolderData({
+          folders: refreshedData.folders || [],
+          files: refreshedData.files || [],
+          pagination: refreshedData.pagination,
+          total_items: refreshedData.pagination?.total_items || 0,
+        });
+
+        setHasNextPage(!!refreshedData.pagination?.has_next);
+
+        const targetName = targetFolderId ? 'folder' : 'Home';
+        toast.success(
+          `Moved ${draggedFileIds.length} file${draggedFileIds.length > 1 ? 's' : ''} to ${targetName}`,
+        );
+      } catch (error) {
+        console.error('Failed to move files:', error);
+        toast.error('Failed to move files', {
+          description: 'Please try again.',
+        });
+
+        // If move failed, refresh to restore correct state
+        try {
+          const refreshedData = await fetchPage(1);
+          allPagesRef.current = [refreshedData];
+          currentPageRef.current = 1;
+
+          setCustomFolderData({
+            folders: refreshedData.folders || [],
+            files: refreshedData.files || [],
+            pagination: refreshedData.pagination,
+            total_items: refreshedData.pagination?.total_items || 0,
+          });
+
+          setHasNextPage(!!refreshedData.pagination?.has_next);
+        } catch (refreshError) {
+          console.error('Failed to refresh after move error:', refreshError);
+        }
+      }
+    },
+    [fetchWithAuth, fetchPage, queryClient],
+  );
 
   // Delete multiple files mutation
   const deleteMultipleMutation = useMutation<
@@ -447,9 +580,38 @@ function RouteComponent() {
       setDeletingImageIds(fileIds);
       return { previousData: null };
     },
-    onSuccess: (data) => {
+    onSuccess: (data, deletedFileIds) => {
+      // Remove deleted images from custom data
+      setCustomFolderData((prevData) => {
+        if (!prevData) {
+          return prevData;
+        }
+
+        const newData = {
+          ...prevData,
+          files: prevData.files.filter(
+            (file) => !deletedFileIds.includes(file._id),
+          ),
+        };
+
+        return newData;
+      });
+
+      // Also update the pages refs to keep them in sync
+      allPagesRef.current = allPagesRef.current.map((page) => ({
+        ...page,
+        files: page.files.filter((file) => !deletedFileIds.includes(file._id)),
+      }));
+
+      // Remove signed URL cache entries for deleted images
+      deletedFileIds.forEach((fileId) => {
+        queryClient.removeQueries({
+          queryKey: ['signed-url', fileId],
+          exact: false,
+        });
+      });
+
       setSelectedImageIds([]);
-      setIsMultiSelectMode(false);
       setIsDeleteDialogOpen(false);
       setDeletingImageIds([]);
 
@@ -480,189 +642,64 @@ function RouteComponent() {
 
   const getGalleryTitle = () => {
     if (profileData?.first_name) {
-      return `${profileData.first_name}'s Gallery`;
+      const firstName = profileData.first_name;
+      // Handle possessive correctly - if name ends with 's', just add apostrophe
+      const possessive = firstName.endsWith('s')
+        ? `${firstName}'`
+        : `${firstName}'s`;
+      return `${possessive} Gallery`;
     }
-    return "User's Gallery";
+    return 'My Gallery';
   };
 
-  if (isLoading || isProfileLoading) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
-        <Spinner />
-      </div>
-    );
-  }
+  // Don't show full page loader - let GalleryContent handle loading states
 
-  // For all errors, including 404, we'll show the empty state with upload option
-  if (isError || (imageData.length === 0 && folderData.length === 0)) {
-    return (
-      <div className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto">
-        {/* Breadcrumb navigation */}
-        {breadcrumbs.length > 0 && (
-          <FolderBreadcrumbs
-            breadcrumbs={breadcrumbs}
-            onNavigate={handleNavigateTo}
-          />
-        )}
-
-        <div className="flex justify-between items-center">
-          <H3>{getGalleryTitle()}</H3>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsCreateFolderOpen(true)}
-            >
-              <FolderPlus className="h-4 w-4" />
-              New Folder
-            </Button>
-            <Button onClick={() => setIsAddDialogOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Add Image(s)
-            </Button>
-          </div>
-        </div>
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-muted-foreground mb-4">
-            {(() => {
-              if (isError && error?.status === 404) {
-                return currentFolderId
-                  ? 'This folder is empty.'
-                  : 'Your gallery is empty. Create folders or upload images to get started.';
-              }
-              if (isError) {
-                return `There was an error: ${error?.statusText || 'Unknown error'}`;
-              }
-              return currentFolderId
-                ? 'This folder is empty.'
-                : 'Your gallery is empty. Create folders or upload images to get started.';
-            })()}
-          </p>
-        </div>
-
-        <AddImageDialog
-          open={isAddDialogOpen}
-          onClose={() => setIsAddDialogOpen(false)}
-          onSuccess={handleImageAdded}
-          folderId={currentFolderId}
-        />
-
-        <CreateFolderDialog
-          open={isCreateFolderOpen}
-          onClose={() => setIsCreateFolderOpen(false)}
-          onSuccess={handleCreateFolder}
-          parentId={currentFolderId}
-        />
-      </div>
-    );
-  }
-
+  // Always show the layout with folder tree - let GalleryContent handle all states
   return (
-    <div className="flex flex-1 flex-col gap-y-4 p-4 max-w-screen-2xl mx-auto">
-      {/* Breadcrumb navigation */}
-      {breadcrumbs.length > 0 && (
-        <FolderBreadcrumbs
-          breadcrumbs={breadcrumbs}
-          onNavigate={handleNavigateTo}
-        />
-      )}
-
-      {/* Header */}
-      <div className="w-full mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-0">
-          <H3>{getGalleryTitle()}</H3>
-          <div className="flex flex-row gap-2">
-            {isMultiSelectMode ? (
-              <>
-                <span className="text-sm self-center mr-2">
-                  {selectedImageIds.length} selected
-                </span>
-                {selectedImageIds.length > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDeleteButtonClick}
-                    disabled={deleteMultipleMutation.isPending}
-                  >
-                    {deleteMultipleMutation.isPending ? (
-                      <>
-                        <Spinner className="h-4 w-4 mr-1" />
-                        Deleting...
-                      </>
-                    ) : (
-                      <>
-                        <Trash className="h-4 w-4 mr-1" />
-                        Delete Selected
-                      </>
-                    )}
-                  </Button>
-                )}
-                {selectedImageIds.length < imageData.length ? (
-                  <Button variant="outline" size="sm" onClick={selectAllImages}>
-                    Select All
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={clearSelections}>
-                    Clear All
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleMultiSelectMode}
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={toggleMultiSelectMode}
-                  disabled={imageData.length === 0}
-                >
-                  Select Multiple
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCreateFolderOpen(true)}
-                >
-                  <FolderPlus className="h-4 w-4" />
-                  New Folder
-                </Button>
-                <Button onClick={() => setIsAddDialogOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                  Add Image(s)
-                </Button>
-              </>
-            )}
-          </div>
+    <div className="flex flex-1 h-full w-full max-w-screen-2xl mx-auto overflow-hidden">
+      {/* Left Sidebar - Folder Tree */}
+      {/* Left Sidebar - Folder Tree */}
+      <div className="w-80 flex-shrink-0 border-r bg-background relative">
+        <div className="absolute inset-0 overflow-hidden">
+          <FolderTreeView
+            currentFolderId={currentFolderId}
+            onFolderSelect={handleNavigateTo}
+            onCreateFolder={() => setIsCreateFolderOpen(true)}
+            onFileDrop={handleFileDrop}
+            className="h-full"
+          />
         </div>
       </div>
 
-      {/* Folders */}
-      <FolderGrid
-        folders={folderData}
-        onFolderClick={handleFolderClick}
-      />
-
-      {/* Virtualized Infinite Gallery */}
-      {imageData.length > 0 && (
-        <VirtualizedInfiniteGallery
-          images={imageData}
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
+        <GalleryContent
+          currentFolderId={currentFolderId}
+          itemData={imageData}
+          breadcrumbs={breadcrumbs}
+          selectedItemIds={selectedImageIds}
+          deletingItemIds={deletingImageIds}
+          isLoading={isLoading || isProfileLoading}
+          isError={isError}
+          error={error}
+          deleteMultipleMutation={deleteMultipleMutation}
+          galleryTitle={getGalleryTitle()}
           columnCount={columnCount}
-          isMultiSelectMode={isMultiSelectMode}
-          selectedImageIds={selectedImageIds}
-          deletingImageIds={deletingImageIds}
-          onImageClick={handleImageClick}
-          onImageSelect={toggleImageSelection}
-          onLoadMore={() => fetchNextPage()}
           hasNextPage={hasNextPage || false}
           isFetchingNextPage={isFetchingNextPage}
+          onNavigateTo={handleNavigateTo}
+          onItemClick={handleImageClick}
+          onItemSelect={toggleImageSelection}
+          onLoadMore={() => fetchNextPage()}
+          onAddItem={() => setIsAddDialogOpen(true)}
+          onClearSelections={clearSelections}
+          onDeleteSelected={handleDeleteButtonClick}
+          onKeyDown={handleKeyDown}
+          onFileDrop={handleFileDrop}
         />
-      )}
+      </div>
 
-      <AddImageDialog
+      <AddItemDialog
         open={isAddDialogOpen}
         onClose={() => setIsAddDialogOpen(false)}
         onSuccess={handleImageAdded}

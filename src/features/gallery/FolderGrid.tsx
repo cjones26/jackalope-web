@@ -1,6 +1,5 @@
 import { Folder, MoreVertical } from 'lucide-react';
 
-import { Folder as FolderType } from './types/Folder';
 import { Button } from '@/shared/ui/Button';
 import { Card } from '@/shared/ui/Card';
 import {
@@ -10,6 +9,8 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/ui/DropdownMenu';
 
+import { Folder as FolderType } from './types/Folder';
+
 interface FolderGridProps {
   folders: FolderType[];
   onFolderClick: (folderId: string) => void;
@@ -18,14 +19,13 @@ interface FolderGridProps {
   onFolderMove?: (folderId: string) => void;
 }
 
-export function FolderGrid({ 
-  folders, 
-  onFolderClick, 
-  onFolderRename, 
-  onFolderDelete, 
-  onFolderMove 
+export function FolderGrid({
+  folders,
+  onFolderClick,
+  onFolderRename,
+  onFolderDelete,
+  onFolderMove,
 }: FolderGridProps) {
-
   if (folders.length === 0) {
     return null;
   }
@@ -35,7 +35,7 @@ export function FolderGrid({
       {folders.map((folder) => (
         <Card key={folder.id} className="p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
-            <div 
+            <div
               className="flex items-center space-x-3 cursor-pointer flex-1"
               onClick={() => onFolderClick(folder.id)}
             >
@@ -49,7 +49,7 @@ export function FolderGrid({
                 </p>
               </div>
             </div>
-            
+
             {(onFolderRename || onFolderDelete || onFolderMove) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -59,7 +59,9 @@ export function FolderGrid({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {onFolderRename && (
-                    <DropdownMenuItem onClick={() => onFolderRename(folder.id, folder.name)}>
+                    <DropdownMenuItem
+                      onClick={() => onFolderRename(folder.id, folder.name)}
+                    >
                       Rename
                     </DropdownMenuItem>
                   )}
@@ -69,7 +71,7 @@ export function FolderGrid({
                     </DropdownMenuItem>
                   )}
                   {onFolderDelete && (
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => onFolderDelete(folder.id)}
                       className="text-destructive"
                     >
