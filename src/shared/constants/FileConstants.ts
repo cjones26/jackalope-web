@@ -1,4 +1,4 @@
-// No file size limit - S3 backend can handle large files
+// No file size limit - S3-compatible storage can handle large files
 export const ACCEPTED_IMAGE_TYPES = [
   'image/jpeg',
   'image/jpg',
@@ -35,7 +35,7 @@ export const ACCEPTED_AUDIO_TYPES = [
   'audio/mp3',
 ];
 
-// All supported file types for S3 backend
+// All supported file types for S3-compatible storage
 export const ACCEPTED_FILE_TYPES = [
   ...ACCEPTED_IMAGE_TYPES,
   ...ACCEPTED_VIDEO_TYPES,

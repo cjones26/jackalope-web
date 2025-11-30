@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { GalleryItem as GalleryImage } from '@/features/gallery/types/GalleryItem';
@@ -31,7 +32,7 @@ import { Form, FormField } from '@/shared/ui/Form';
 import { FormInput, FormTextarea } from '@/shared/ui/Form/Form';
 import { TagInput } from '@/shared/ui/TagInput';
 
-import { SecureImage } from './SecureImage';
+import { FileViewer } from './FileViewer';
 
 const imageEditSchema = z.object({
   title: z.string().optional(),
@@ -79,6 +80,21 @@ export function ImageDetails({
       setCurrentImage(allImages[currentIndex - 1]);
     }
   };
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (open) {
+      // Save original overflow style
+      const originalOverflow = document.body.style.overflow;
+      // Prevent scrolling
+      document.body.style.overflow = 'hidden';
+
+      return () => {
+        // Restore original overflow when modal closes
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [open]);
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -139,7 +155,15 @@ export function ImageDetails({
     }).format(date);
   };
 
-  // Reset form when current image changes
+  // Sync currentImage when the image prop changes (e.g., after data refetch)
+  // BUT only if we're not in editing mode to prevent disrupting the form
+  useEffect(() => {
+    if (!isEditing) {
+      setCurrentImage(image);
+    }
+  }, [image, isEditing]);
+
+  // Reset form when current image changes (but not when isEditing changes to avoid clearing during editing)
   useEffect(() => {
     if (!isEditing) {
       form.reset({
@@ -148,21 +172,50 @@ export function ImageDetails({
         tags: currentImage.tags || [],
       });
     }
-  }, [currentImage, form, isEditing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentImage._id, isEditing]); // Only reset when switching to a different image OR exiting edit mode
 
   // Update image metadata mutation
   const updateMutation = useMutation({
     mutationFn: async (data: ImageEditFormData) => {
-      return fetchWithAuth(`/gallery/${currentImage._id}`, {
-        method: 'PUT',
+      return fetchWithAuth(`/api/v1/uploads/${currentImage._id}`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(data),
       });
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
+      // Update local state with the updated file data from server
+      if (response?.file) {
+        const updatedImage: GalleryImage = {
+          ...currentImage,
+          title:
+            response.file.filename?.replace(/\.[^/.]+$/, '') ||
+            currentImage.title, // Remove extension for display
+          description: response.file.description || '',
+          tags: response.file.tags || [],
+        };
+
+        // Update currentImage with fresh data
+        setCurrentImage(updatedImage);
+
+        // Reset form with new values to clear dirty state
+        form.reset({
+          title: updatedImage.title || '',
+          description: updatedImage.description || '',
+          tags: updatedImage.tags || [],
+        });
+      }
+
+      // Exit edit mode to show the updated details
       setIsEditing(false);
+
+      // Show success toast
+      toast.success('File details saved successfully');
+
+      // Notify parent to refresh gallery view (for thumbnail updates, etc.)
       onUpdate();
     },
   });
@@ -170,7 +223,7 @@ export function ImageDetails({
   // Delete image mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      return fetchWithAuth('/api/v1/folders/files', {
+      return fetchWithAuth('/api/v1/uploads/bulk', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -226,8 +279,12 @@ export function ImageDetails({
             <Button
               variant="ghost"
               size="icon"
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
               className="rounded-full hover:bg-muted"
+              style={{ pointerEvents: 'auto' }}
             >
               <X className="h-5 w-5" />
               <span className="sr-only">Close</span>
@@ -262,11 +319,13 @@ export function ImageDetails({
 
             {/* Image with max dimensions to maintain aspect ratio */}
             <div className="relative w-full h-full flex items-center justify-center">
-              <SecureImage
+              <FileViewer
                 uploadId={currentImage._id}
                 alt={currentImage.title || 'Gallery image'}
                 className="max-h-full max-w-full object-contain"
                 thumbnail={false} // Full size image in details view
+                mimeType={currentImage.mimeType}
+                filename={currentImage.title}
               />
 
               {/* Navigation indicator */}

@@ -1,16 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Plus, Trash2, Upload, X } from 'lucide-react';
+import { Play, Plus, Trash2, Upload, X } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
+import { FileIcon, FileIconPlaceholder } from '@/shared/components/FileIcon';
 import { ACCEPTED_FILE_TYPES } from '@/shared/constants/FileConstants';
+import { useHub } from '@/shared/context/hub';
 import { useSupabase } from '@/shared/context/supabase';
 import { ResumableUploader } from '@/shared/services/ResumableUploader';
+import { extractThumbnailDataUrl } from '@/shared/utils/thumbnailExtractor';
 import { Button } from '@/shared/ui/Button';
 import {
   Card,
@@ -25,6 +28,7 @@ import { FormInput, FormTextarea } from '@/shared/ui/Form/Form';
 import { Progress } from '@/shared/ui/Progress';
 import { TagInput } from '@/shared/ui/TagInput';
 import { cn } from '@/shared/ui/utils';
+import { getFileCategory } from '@/shared/utils/fileTypeUtils';
 
 // Define the schema for an individual item with metadata
 const itemWithMetadataSchema = z.object({
@@ -59,17 +63,27 @@ interface UnifiedItemUploadProps {
 
 // Virtualized file list component for handling large uploads efficiently
 interface VirtualizedFileListProps {
-  fields: any[];
-  form: any;
+  fields: Array<{
+    id: string;
+    file: File;
+    title?: string;
+    description?: string;
+    tags?: string[];
+  }>;
+  form: ReturnType<typeof useForm<UploadFormData>>;
   getPreviewUrl: (file: File) => string;
+  previewUrlsRef: React.MutableRefObject<Map<string, string>>;
   handleRemoveFile: (index: number) => void;
+  isUploading?: boolean;
 }
 
 function VirtualizedFileList({
   fields,
   form,
   getPreviewUrl,
+  previewUrlsRef,
   handleRemoveFile,
+  isUploading = false,
 }: VirtualizedFileListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -113,12 +127,34 @@ function VirtualizedFileList({
             >
               <div className="flex items-center justify-between p-2 rounded-md bg-muted/40 hover:bg-muted/60 transition-colors mb-2">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded overflow-hidden bg-muted flex-shrink-0">
-                    <img
-                      src={getPreviewUrl(item.file)}
-                      alt={`Preview ${virtualItem.index}`}
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="w-8 h-8 rounded overflow-hidden bg-muted flex-shrink-0 flex items-center justify-center">
+                    {(() => {
+                      const category = getFileCategory(
+                        item.file.type,
+                        item.file.name,
+                      );
+                      const fileKey = `${item.file.name}-${item.file.size}-${item.file.lastModified}`;
+                      const hasPreview =
+                        form.getValues().items[virtualItem.index] &&
+                        previewUrlsRef.current.has(fileKey);
+
+                      if (category === 'image' || (category === 'video' && hasPreview)) {
+                        return (
+                          <img
+                            src={getPreviewUrl(item.file)}
+                            alt={`Preview ${virtualItem.index}`}
+                            className="w-full h-full object-cover"
+                          />
+                        );
+                      } else {
+                        return (
+                          <FileIcon
+                            category={category}
+                            size={20}
+                          />
+                        );
+                      }
+                    })()}
                   </div>
                   <div className="flex flex-col min-w-0 flex-1">
                     <span className="text-sm font-medium truncate max-w-[200px]">
@@ -138,6 +174,7 @@ function VirtualizedFileList({
                     e.stopPropagation();
                     handleRemoveFile(virtualItem.index);
                   }}
+                  disabled={isUploading}
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -156,9 +193,14 @@ export function UnifiedItemUpload({
 }: UnifiedItemUploadProps) {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isProcessingThumbnails, setIsProcessingThumbnails] = useState(false);
+  const [thumbnailProgress, setThumbnailProgress] = useState({ current: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const previewUrlsRef = useRef<Map<string, string>>(new Map());
   const { session } = useSupabase();
+  const { currentHub } = useHub();
 
   const form = useForm<UploadFormData>({
     resolver: zodResolver(uploadFormSchema),
@@ -189,7 +231,7 @@ export function UnifiedItemUpload({
   }, []);
 
   // Handle file selection
-  const handleFilesSelected = (files: FileList | null) => {
+  const handleFilesSelected = async (files: FileList | null) => {
     if (!files || files.length === 0) {
       return;
     }
@@ -209,17 +251,83 @@ export function UnifiedItemUpload({
         tags: [],
       });
     });
+
+    // Extract thumbnails for video files sequentially
+    const videoFiles = filesArray.filter((f) => f.type.startsWith('video/'));
+
+    if (videoFiles.length > 0) {
+      setIsProcessingThumbnails(true);
+      setThumbnailProgress({ current: 0, total: videoFiles.length });
+
+      // Process videos one at a time sequentially
+      for (let i = 0; i < videoFiles.length; i++) {
+        const file = videoFiles[i];
+        setThumbnailProgress({ current: i + 1, total: videoFiles.length });
+
+        try {
+          const thumbnailDataUrl = await extractThumbnailDataUrl(file);
+          const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
+          previewUrlsRef.current.set(fileKey, thumbnailDataUrl);
+          // Force a re-render to show the thumbnail
+          form.trigger();
+        } catch (error) {
+          console.warn(
+            `Failed to extract video thumbnail for ${file.name}:`,
+            error,
+          );
+          // If thumbnail fails, we'll fall back to video placeholder icon in the UI
+        }
+      }
+
+      setIsProcessingThumbnails(false);
+      setThumbnailProgress({ current: 0, total: 0 });
+    }
   };
 
   // Handle removing a file
   const handleRemoveFile = (index: number) => {
+    const item = form.getValues(`items.${index}`);
+    if (item?.file) {
+      // Clean up preview URL for this file
+      const fileKey = `${item.file.name}-${item.file.size}-${item.file.lastModified}`;
+      const url = previewUrlsRef.current.get(fileKey);
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+      previewUrlsRef.current.delete(fileKey);
+    }
     remove(index);
   };
 
   // Handle clearing all files
   const handleClearFiles = () => {
+    // Clean up all preview URLs
+    previewUrlsRef.current.forEach((url) => {
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    previewUrlsRef.current.clear();
+
     form.setValue('items', []);
+    setIsVideoPlaying(false);
   };
+
+  // Handle video play/pause
+  const handleVideoPlayPause = useCallback(() => {
+    // Toggle the playing state - the actual play will happen in useEffect
+    setIsVideoPlaying((prev) => !prev);
+  }, []);
+
+  // Auto-play video when isVideoPlaying becomes true
+  useEffect(() => {
+    if (isVideoPlaying && videoRef.current) {
+      videoRef.current.play().catch((error) => {
+        console.error('Failed to play video:', error);
+        setIsVideoPlaying(false);
+      });
+    }
+  }, [isVideoPlaying]);
 
   // Open file dialog
   const handleOpenFileDialog = () => {
@@ -267,13 +375,24 @@ export function UnifiedItemUpload({
         `📦 Processing ${totalItems} files in ${batches.length} batches (${BATCH_SIZE} concurrent uploads)`,
       );
 
-      // Initialize progress tracking
+      // Initialize progress tracking per file
+      const fileProgress = new Map<string, number>();
+      data.items.forEach((item) => {
+        fileProgress.set(item.id, 0);
+      });
+
+      const updateOverallProgress = () => {
+        const totalProgress = Array.from(fileProgress.values()).reduce(
+          (sum, progress) => sum + progress,
+          0,
+        );
+        const overallProgress = (totalProgress / totalItems) * 100;
+        setUploadProgress(Math.min(overallProgress, 95));
+      };
 
       if (!session?.access_token) {
         throw new Error('Authentication required');
       }
-
-      let completedFiles = 0;
 
       // Process batches sequentially, but files within each batch concurrently
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
@@ -290,12 +409,16 @@ export function UnifiedItemUpload({
               session.access_token,
             );
 
-            const result = await uploader.uploadFile(item.file, (progress) => {
-              // Update progress for this specific file
-              const fileProgress =
-                ((completedFiles + progress / 100) / totalItems) * 100;
-              setUploadProgress(Math.min(fileProgress, 95));
-            });
+            const result = await uploader.uploadFile(
+              item.file,
+              (progress) => {
+                // Update progress for this specific file
+                fileProgress.set(item.id, progress / 100);
+                updateOverallProgress();
+              },
+              undefined, // onChunkComplete
+              currentHub?.id, // hubId
+            );
 
             if (!result.success) {
               console.error(
@@ -309,7 +432,7 @@ export function UnifiedItemUpload({
             if (folderId && result.uploadId) {
               try {
                 await fetch(
-                  `${import.meta.env.VITE_API_URL}/api/v1/folders/files/${result.uploadId}/move`,
+                  `${import.meta.env.VITE_API_URL}/api/v1/uploads/${result.uploadId}/move`,
                   {
                     method: 'POST',
                     headers: {
@@ -326,7 +449,9 @@ export function UnifiedItemUpload({
             }
 
             console.log(`✅ Completed: ${item.file.name}`);
-            completedFiles++;
+            // Mark file as fully complete
+            fileProgress.set(item.id, 1);
+            updateOverallProgress();
             return { success: true, uploadId: result.uploadId };
           } catch (error) {
             console.error(`❌ Failed to upload ${item.file.name}:`, error);
@@ -337,9 +462,6 @@ export function UnifiedItemUpload({
         // Wait for all files in current batch to complete
         const batchResults = await Promise.all(batchPromises);
         responses.push(...batchResults);
-
-        // Update progress after batch completion
-        setUploadProgress((completedFiles / totalItems) * 100);
       }
 
       setUploadProgress(100);
@@ -460,12 +582,32 @@ export function UnifiedItemUpload({
             {/* File preview and actions */}
             <div className="flex items-center justify-between p-4 border rounded-md bg-muted/20">
               <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 rounded overflow-hidden bg-muted">
-                  <img
-                    src={getPreviewUrl(fields[0].file)}
-                    alt="Preview"
-                    className="w-full h-full object-cover"
-                  />
+                <div className="w-12 h-12 rounded overflow-hidden bg-muted flex items-center justify-center">
+                  {(() => {
+                    const category = getFileCategory(
+                      fields[0].file.type,
+                      fields[0].file.name,
+                    );
+                    const fileKey = `${fields[0].file.name}-${fields[0].file.size}-${fields[0].file.lastModified}`;
+                    const hasPreview = previewUrlsRef.current.has(fileKey);
+
+                    if (category === 'image' || (category === 'video' && hasPreview)) {
+                      return (
+                        <img
+                          src={getPreviewUrl(fields[0].file)}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                      );
+                    } else {
+                      return (
+                        <FileIcon
+                          category={category}
+                          size={28}
+                        />
+                      );
+                    }
+                  })()}
                 </div>
                 <div>
                   <p className="font-medium">{fields[0].file.name}</p>
@@ -479,6 +621,7 @@ export function UnifiedItemUpload({
                 variant="outline"
                 size="sm"
                 onClick={handleClearFiles}
+                disabled={uploadMutation.isPending}
               >
                 <X className="h-4 w-4 mr-1" />
                 Remove
@@ -495,11 +638,86 @@ export function UnifiedItemUpload({
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="relative w-full h-[300px] overflow-hidden rounded-md bg-muted flex items-center justify-center">
-                  <img
-                    src={getPreviewUrl(fields[0].file)}
-                    alt="Preview"
-                    className="max-w-full max-h-[300px] object-contain"
-                  />
+                  {(() => {
+                    const category = getFileCategory(
+                      fields[0].file.type,
+                      fields[0].file.name,
+                    );
+                    const fileKey = `${fields[0].file.name}-${fields[0].file.size}-${fields[0].file.lastModified}`;
+                    const hasPreview = previewUrlsRef.current.has(fileKey);
+
+                    {/* Image preview */}
+                    if (category === 'image') {
+                      return (
+                        <img
+                          src={getPreviewUrl(fields[0].file)}
+                          alt="Preview"
+                          className="max-w-full max-h-[300px] object-contain"
+                        />
+                      );
+                    }
+
+                    {/* Video preview */}
+                    if (category === 'video') {
+                      if (!hasPreview) {
+                        // Show placeholder while thumbnail is being generated
+                        return (
+                          <FileIconPlaceholder
+                            category="video"
+                            className="w-full h-full"
+                            iconSize={80}
+                          />
+                        );
+                      }
+
+                      return (
+                        <>
+                          {/* Keep video in DOM to preserve playback position */}
+                          <video
+                            ref={videoRef}
+                            className={cn(
+                              'max-w-full max-h-[300px] object-contain',
+                              !isVideoPlaying && 'hidden',
+                            )}
+                            controls
+                            onEnded={() => setIsVideoPlaying(false)}
+                          >
+                            <source
+                              src={URL.createObjectURL(fields[0].file)}
+                              type={fields[0].file.type}
+                            />
+                          </video>
+                          {/* Thumbnail with play button - only show when not playing */}
+                          {!isVideoPlaying && (
+                            <div
+                              className="relative cursor-pointer group"
+                              onClick={handleVideoPlayPause}
+                            >
+                              <img
+                                src={getPreviewUrl(fields[0].file)}
+                                alt="Video thumbnail"
+                                className="max-w-full max-h-[300px] object-contain"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+                                <div className="bg-white/90 rounded-full p-4 group-hover:scale-110 transition-transform">
+                                  <Play className="h-12 w-12 text-black fill-black" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    }
+
+                    {/* Other file types */}
+                    return (
+                      <FileIconPlaceholder
+                        category={category}
+                        className="w-full h-full"
+                        iconSize={80}
+                      />
+                    );
+                  })()}
                 </div>
                 <div className="space-y-3">
                   <FormField
@@ -601,6 +819,7 @@ export function UnifiedItemUpload({
                   variant="outline"
                   size="sm"
                   onClick={handleOpenFileDialog}
+                  disabled={uploadMutation.isPending}
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Add More
@@ -610,6 +829,7 @@ export function UnifiedItemUpload({
                   variant="outline"
                   size="sm"
                   onClick={handleClearFiles}
+                  disabled={uploadMutation.isPending}
                 >
                   <Trash2 className="h-4 w-4 mr-1" />
                   Clear All
@@ -622,7 +842,9 @@ export function UnifiedItemUpload({
               fields={fields}
               form={form}
               getPreviewUrl={getPreviewUrl}
+              previewUrlsRef={previewUrlsRef}
               handleRemoveFile={handleRemoveFile}
+              isUploading={uploadMutation.isPending}
             />
 
             <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
@@ -650,6 +872,22 @@ export function UnifiedItemUpload({
           accept={ACCEPTED_FILE_TYPES.join(',')}
           className="hidden"
         />
+
+        {/* Thumbnail processing progress */}
+        {isProcessingThumbnails && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Generating video thumbnails...</span>
+              <span>
+                {thumbnailProgress.current}/{thumbnailProgress.total}
+              </span>
+            </div>
+            <Progress
+              value={(thumbnailProgress.current / thumbnailProgress.total) * 100}
+              className="h-2"
+            />
+          </div>
+        )}
 
         {/* Upload progress */}
         {uploadMutation.isPending && (
@@ -683,7 +921,7 @@ export function UnifiedItemUpload({
           <DialogFooter>
             <Button
               type="submit"
-              disabled={uploadMutation.isPending}
+              disabled={uploadMutation.isPending || isProcessingThumbnails}
               className="gap-1"
               size="lg"
               onClick={() => {
@@ -697,7 +935,9 @@ export function UnifiedItemUpload({
                 });
               }}
             >
-              {uploadMutation.isPending ? (
+              {isProcessingThumbnails ? (
+                'Processing...'
+              ) : uploadMutation.isPending ? (
                 'Uploading...'
               ) : (
                 <>

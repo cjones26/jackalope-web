@@ -6,13 +6,17 @@ import {
   redirect,
 } from '@tanstack/react-router';
 import { ImageIcon, LogOut } from 'lucide-react';
+import { useMemo, useCallback } from 'react';
 
 import DefaultAvatar from '@/assets/default-avatar.jpg';
 import Icon from '@/assets/icon.png';
 import IconDark from '@/assets/icon-dark.png';
+import { HubSwitcher } from '@/features/hubs/components/HubSwitcher';
 import Footer from '@/shared/components/Footer';
+import { useHub } from '@/shared/context/hub';
 import { useSupabase } from '@/shared/context/supabase';
 import { useTheme } from '@/shared/context/theme';
+import { useApi } from '@/shared/hooks/useApi';
 import useSignOut from '@/shared/hooks/useSignOut';
 import { supabase } from '@/shared/services/supabase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/Avatar';
@@ -37,11 +41,13 @@ export const Route = createFileRoute('/(protected)')({
 function RouteComponent() {
   const { colorScheme } = useTheme();
   const { user } = useSupabase();
+  const { fetchWithAuth } = useApi();
   const signOut = useSignOut();
+  const { selectedHubId, setSelectedHubId, setCurrentHub } = useHub();
 
   // Fetch user profile data directly from Supabase
   const { data: profile } = useQuery({
-    queryKey: ['user', user?.id],
+    queryKey: ['user-nav', user?.id], // Separate key for navbar data
     queryFn: async () => {
       if (!user?.id) {
         throw new Error('User not authenticated');
@@ -60,6 +66,49 @@ function RouteComponent() {
     },
     enabled: !!user?.id,
   });
+
+  // Fetch hubs for the switcher
+  const { data: profileData } = useQuery({
+    queryKey: ['user-hubs', user?.id],
+    queryFn: async () => {
+      if (!user?.id) throw new Error('User not authenticated');
+      const result = await fetchWithAuth('/api/v1/profile/me');
+      return result.data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Transform hubs data
+  const userHubs = useMemo(() => {
+    return (profileData?.hubs || []).map((membership: any) => ({
+      id: membership.hubs.id,
+      name: membership.hubs.name,
+      slug: membership.hubs.slug,
+      description: membership.hubs.description,
+      role: membership.role
+    }));
+  }, [profileData?.hubs]);
+
+  // Get current hub and update context
+  const currentHub = useMemo(() => {
+    const membership = profileData?.hubs?.find((h: any) => h.hubs.id === selectedHubId)
+      || profileData?.hubs?.[0];
+    const hub = membership?.hubs;
+    if (hub) {
+      setCurrentHub({
+        id: hub.id,
+        name: hub.name,
+        slug: hub.slug,
+        description: hub.description,
+        role: membership.role,
+      });
+    }
+    return hub;
+  }, [profileData?.hubs, selectedHubId, setCurrentHub]);
+
+  const handleHubChange = useCallback((hubId: string) => {
+    setSelectedHubId(hubId);
+  }, [setSelectedHubId]);
 
   // Generate avatar initials from profile data if available
   const getInitials = () => {
@@ -102,13 +151,21 @@ function RouteComponent() {
             <span className="text-xl font-bold">Jackalope</span>
           </Link>
 
-          <nav className="flex items-center space-x-1">
+          <nav className="flex items-center space-x-4">
             <Link to="/gallery">
               <Button variant="ghost" className="flex items-center gap-2">
                 <ImageIcon size={18} />
                 <span>Gallery</span>
               </Button>
             </Link>
+
+            {userHubs.length > 0 && (
+              <HubSwitcher
+                hubs={userHubs}
+                currentHubId={selectedHubId || undefined}
+                onHubChange={handleHubChange}
+              />
+            )}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -124,9 +181,9 @@ function RouteComponent() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <Link to="/profile" className="w-full">
+                <Link to="/settings" className="w-full">
                   <DropdownMenuItem className="cursor-pointer">
-                    Profile
+                    Settings
                   </DropdownMenuItem>
                 </Link>
                 <DropdownMenuSeparator />

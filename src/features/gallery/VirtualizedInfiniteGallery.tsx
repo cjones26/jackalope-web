@@ -12,8 +12,8 @@ import {
   ContextMenuTrigger,
 } from '@/shared/ui/context-menu';
 
+import { FileViewer } from './FileViewer';
 import { useFolderTree } from './hooks/useFolderTree';
-import { SecureImage } from './SecureImage';
 import { GalleryItem } from './types/GalleryItem';
 
 interface VirtualizedInfiniteGalleryProps {
@@ -26,7 +26,7 @@ interface VirtualizedInfiniteGalleryProps {
   onLoadMore: () => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
-  onDeleteSelected?: () => void;
+  onDeleteSelected?: (itemIds?: string[]) => void;
   onClearSelections?: () => void;
   onMoveToFolder?: (
     draggedFileIds: string[],
@@ -167,7 +167,7 @@ export const VirtualizedInfiniteGallery = memo(
             const isDeleting = deletingItemIds.includes(item._id);
 
             return (
-              <ContextMenu key={item._id}>
+              <ContextMenu key={`context-${item._id}`}>
                 <ContextMenuTrigger asChild>
                   <div
                     draggable={true}
@@ -175,11 +175,12 @@ export const VirtualizedInfiniteGallery = memo(
                       isSelected
                         ? 'border-2 border-primary shadow-xl'
                         : 'hover:bg-black/5 hover:shadow-xl border-2 border-transparent'
-                    } ${isDeleting ? 'opacity-50' : ''}`}
+                    } ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
                     style={{
                       ...item.style,
                       padding: '8px', // Matched vertical and horizontal padding
                       boxSizing: 'border-box',
+                      pointerEvents: isDeleting ? 'none' : 'auto',
                     }}
                     onClick={(e) => {
                       // Handle Ctrl+click and Shift+click for multi-selection
@@ -211,12 +212,14 @@ export const VirtualizedInfiniteGallery = memo(
                     }}
                   >
                     <div className="relative w-full h-full">
-                      <SecureImage
+                      <FileViewer
                         uploadId={item._id}
                         alt={item.title || 'Gallery item'}
                         className="w-full h-full object-cover rounded-lg"
                         thumbnail={true}
                         disabled={isDeleting}
+                        mimeType={item.mimeType}
+                        filename={item.title}
                       />
                       {item.title && (
                         <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-sm truncate">
@@ -288,10 +291,11 @@ export const VirtualizedInfiniteGallery = memo(
                   <ContextMenuItem
                     variant="destructive"
                     onClick={() => {
-                      if (!isSelected) {
-                        onItemSelect(item._id, new MouseEvent('click'));
-                      }
-                      onDeleteSelected?.();
+                      // Pass the item IDs to delete directly
+                      const itemsToDelete = isSelected
+                        ? selectedItemIds
+                        : [item._id];
+                      onDeleteSelected?.(itemsToDelete);
                     }}
                   >
                     Delete
@@ -329,16 +333,36 @@ export const VirtualizedInfiniteGallery = memo(
     );
   },
   (prevProps, nextProps) => {
-    // Simple memo comparison for fixed grid
-    return (
-      prevProps.items === nextProps.items &&
-      prevProps.columnCount === nextProps.columnCount &&
+    // Custom memo comparison for fixed grid
+    // Return true if props are equal (skip re-render), false if different (do re-render)
+    const itemsEqual = prevProps.items === nextProps.items;
+    const columnCountEqual = prevProps.columnCount === nextProps.columnCount;
+    const selectedIdsEqual =
       JSON.stringify(prevProps.selectedItemIds) ===
-        JSON.stringify(nextProps.selectedItemIds) &&
+      JSON.stringify(nextProps.selectedItemIds);
+    const deletingIdsEqual =
       JSON.stringify(prevProps.deletingItemIds) ===
-        JSON.stringify(nextProps.deletingItemIds) &&
-      prevProps.hasNextPage === nextProps.hasNextPage &&
-      prevProps.isFetchingNextPage === nextProps.isFetchingNextPage
+      JSON.stringify(nextProps.deletingItemIds);
+    const hasNextPageEqual = prevProps.hasNextPage === nextProps.hasNextPage;
+    const isFetchingEqual =
+      prevProps.isFetchingNextPage === nextProps.isFetchingNextPage;
+
+    // Also check callback functions - if they change, we need to re-render
+    const callbacksEqual =
+      prevProps.onItemClick === nextProps.onItemClick &&
+      prevProps.onItemSelect === nextProps.onItemSelect &&
+      prevProps.onDeleteSelected === nextProps.onDeleteSelected &&
+      prevProps.onClearSelections === nextProps.onClearSelections &&
+      prevProps.onMoveToFolder === nextProps.onMoveToFolder;
+
+    return (
+      itemsEqual &&
+      columnCountEqual &&
+      selectedIdsEqual &&
+      deletingIdsEqual &&
+      hasNextPageEqual &&
+      isFetchingEqual &&
+      callbacksEqual
     );
   },
 );

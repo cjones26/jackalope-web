@@ -1,67 +1,48 @@
-import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+import { useState } from 'react';
+import { User, Settings } from 'lucide-react';
 
+import { useHub } from '@/shared/context/hub';
 import { useSupabase } from '@/shared/context/supabase';
 import { useApi } from '@/shared/hooks/useApi';
-import { Button } from '@/shared/ui/Button';
-import { Form, FormField } from '@/shared/ui/Form';
-import { FormInput } from '@/shared/ui/Form/Form';
-
-import { ProfileAvatar } from './ProfileAvatar';
-
-const profileSchema = z.object({
-  firstName: z.string().min(1, 'First name is required.'),
-  lastName: z.string().min(1, 'Last name is required.'),
-});
-
-type ProfileFormData = z.infer<typeof profileSchema>;
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs';
+import { ProfileInfoCard } from '@/features/settings';
+import { HubSettingsForm } from '@/features/hubs/components/HubSettingsForm';
 
 interface ProfileFormProps {
   profile: {
     first_name: string | null;
     last_name: string | null;
     avatar_url: string | null;
+    hubs?: any[];
   } | null;
 }
 
 export function ProfileForm({ profile }: ProfileFormProps) {
-  const [successMessage, setSuccessMessage] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(
     profile?.avatar_url || null,
   );
   const queryClient = useQueryClient();
   const { user } = useSupabase();
   const { fetchWithAuth } = useApi();
+  const { selectedHubId } = useHub();
 
-  const form = useForm<ProfileFormData>({
-    resolver: zodResolver(profileSchema),
-    defaultValues: {
-      firstName: profile?.first_name || '',
-      lastName: profile?.last_name || '',
-    },
-  });
-
-  // Update form and avatar URL when profile changes
-  useEffect(() => {
-    form.reset({
-      firstName: profile?.first_name || '',
-      lastName: profile?.last_name || '',
-    });
-
-    setAvatarUrl(profile?.avatar_url || null);
-  }, [profile, form]);
+  // Get current hub membership
+  const currentMembership = profile?.hubs?.find((h: any) => h.hubs.id === selectedHubId)
+    || profile?.hubs?.[0];
+  const currentHub = currentMembership?.hubs;
+  const isAdmin = currentMembership?.role === 'admin';
+  const storageConfig = currentHub?.hub_storage_config;
+  const isStorageConfigured = !!storageConfig;
 
   // Handle avatar URL changes from the ProfileAvatar component
   const handleAvatarChange = (url: string | null) => {
     setAvatarUrl(url);
   };
 
-  // Update profile via backend API
-  const userMutation = useMutation({
-    mutationFn: async (data: ProfileFormData) => {
+  // Update profile mutation (personal info only)
+  const profileMutation = useMutation({
+    mutationFn: async (data: { firstName: string; lastName: string }) => {
       if (!user) {
         throw new Error('User not authenticated');
       }
@@ -78,90 +59,54 @@ export function ProfileForm({ profile }: ProfileFormProps) {
         }),
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
-      setSuccessMessage('Profile updated successfully!');
+    onSuccess: (responseData) => {
+      queryClient.setQueryData(['user', user?.id], responseData.data);
+      queryClient.invalidateQueries({ queryKey: ['user-nav', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['user-hubs', user?.id] });
     },
   });
 
-  function onSubmit(data: ProfileFormData) {
-    setSuccessMessage('');
-    userMutation.mutate(data);
-  }
-
-  const handleFormChange = () => {
-    userMutation.reset();
-    setSuccessMessage('');
+  const handleProfileSubmit = (data: { firstName: string; lastName: string }) => {
+    profileMutation.mutate(data);
   };
 
   return (
-    <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        onChange={handleFormChange}
-        className="flex flex-col items-center gap-6 w-full max-w-md"
-      >
-        <ProfileAvatar
-          avatarUrl={avatarUrl}
-          firstName={profile?.first_name}
-          lastName={profile?.last_name}
-          onAvatarChange={handleAvatarChange}
-        />
+    <div className="w-full max-w-4xl">
+      <Tabs defaultValue="profile" className="w-full">
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <TabsTrigger value="profile" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Profile
+          </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="storage-config" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Storage Configuration
+            </TabsTrigger>
+          )}
+        </TabsList>
 
-        <div className="w-full flex flex-col items-center space-y-4">
-          <FormField
-            control={form.control}
-            name="firstName"
-            render={({ field }) => (
-              <FormInput
-                type="text"
-                placeholder="First Name"
-                autoCapitalize="words"
-                autoComplete="given-name"
-                className="w-full lg:w-80"
-                {...field}
-              />
-            )}
+        <TabsContent value="profile" className="mt-6">
+          <ProfileInfoCard
+            profile={profile}
+            avatarUrl={avatarUrl}
+            onAvatarChange={handleAvatarChange}
+            onSubmit={handleProfileSubmit}
+            mutation={profileMutation}
           />
-          <FormField
-            control={form.control}
-            name="lastName"
-            render={({ field }) => (
-              <FormInput
-                type="text"
-                placeholder="Last Name"
-                autoCapitalize="words"
-                autoComplete="family-name"
-                className="w-full lg:w-80"
-                {...field}
-              />
-            )}
-          />
-          {userMutation.isError ? (
-            <p className="font-medium text-destructive w-full break-words text-center text-sm">
-              There was an error saving your profile. Please try again.
-            </p>
-          ) : null}
-          {successMessage ? (
-            <p className="font-medium text-green-600 w-full break-words text-center text-sm">
-              {successMessage}
-            </p>
-          ) : null}
-          <Button
-            type="submit"
-            className={`w-full lg:w-80 ${
-              userMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-            disabled={userMutation.isPending}
-          >
-            {userMutation.isPending ? (
-              <span>Saving...</span>
-            ) : (
-              <span>Update Profile</span>
-            )}
-          </Button>
-        </div>
-      </form>
-    </Form>
+        </TabsContent>
+
+        {isAdmin && currentHub && (
+          <TabsContent value="storage-config" className="mt-6">
+            <HubSettingsForm
+              hubId={currentHub.id}
+              hubName={currentHub.name}
+              isAdmin={isAdmin}
+              storageConfig={storageConfig || null}
+            />
+          </TabsContent>
+        )}
+      </Tabs>
+    </div>
   );
 }

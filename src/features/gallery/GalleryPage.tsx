@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { useHub } from '@/shared/context/hub';
 import { useSupabase } from '@/shared/context/supabase';
 import { ApiError, useApi } from '@/shared/hooks/useApi';
+import { Alert, AlertDescription, AlertTitle } from '@/shared/ui/Alert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +24,7 @@ import { CreateFolderDialog } from './CreateFolderDialog';
 import { FolderTreeView } from './FolderTreeView';
 import { GalleryContent } from './GalleryContent';
 import { ImageDetails } from './ImageDetails';
+import { StorageUnavailableWarning } from './StorageUnavailableWarning';
 import { BreadcrumbItem, FolderContentsResponse } from './types/Folder';
 import { GalleryItem as GalleryImage } from './types/GalleryItem';
 
@@ -49,6 +53,7 @@ interface GalleryPageProps {
 export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
   const { fetchWithAuth } = useApi();
   const { user } = useSupabase();
+  const { currentHub } = useHub();
 
   const navigate = useNavigate();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -66,6 +71,30 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
   const columnCount = 5;
 
   const [itemsPerPage] = useState(50); // Good balance for performance
+
+  // Sorting state
+  const [sortBy, setSortBy] = useState<
+    'name' | 'created_at' | 'updated_at' | 'type' | 'size'
+  >('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Handler to change sort field - resets to page 1
+  const handleSortChange = useCallback((newSortBy: typeof sortBy) => {
+    setSortBy(newSortBy);
+  }, []);
+
+  // Handler to toggle sort order - resets to page 1
+  const handleSortOrderToggle = useCallback(() => {
+    setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  }, []);
+
+  // Handler for search - resets to page 1
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
 
   // CUSTOM INFINITE SCROLL IMPLEMENTATION - Bypassing React Query completely
   const [customFolderData, setCustomFolderData] = useState<{
@@ -88,11 +117,7 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
       return null;
     }
     return customFolderData;
-  }, [
-    customFolderData?.files,
-    customFolderData?.folders,
-    customFolderData?.total_items,
-  ]);
+  }, [customFolderData]);
 
   // Function to fetch a specific page
   const fetchPage = useCallback(
@@ -104,12 +129,26 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: itemsPerPage.toString(),
+        sort: sortBy,
+        order: sortOrder,
       });
+
+      // Add search parameter if query is not empty
+      if (searchQuery.trim()) {
+        params.append('search', searchQuery.trim());
+      }
 
       const result = await fetchWithAuth(`${endpoint}?${params}`);
       return result;
     },
-    [currentFolderId, itemsPerPage, fetchWithAuth],
+    [
+      currentFolderId,
+      itemsPerPage,
+      fetchWithAuth,
+      sortBy,
+      sortOrder,
+      searchQuery,
+    ],
   );
 
   // Function to fetch next page
@@ -172,7 +211,7 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
     }
   }, [hasNextPage, isFetchingNextPage, fetchPage]);
 
-  // Initial data fetch when folder changes
+  // Initial data fetch when folder changes OR sorting changes
   useEffect(() => {
     const loadInitialData = async () => {
       setIsLoading(true);
@@ -219,7 +258,7 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
     };
 
     loadInitialData();
-  }, [currentFolderId, fetchPage]);
+  }, [currentFolderId, fetchPage]); // fetchPage dependency includes sortBy and sortOrder
 
   // Fetch profile data
   const { data: profileData, isLoading: isProfileLoading } = useQuery<
@@ -227,6 +266,27 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
       first_name: string | null;
       last_name: string | null;
       avatar_url: string | null;
+      hubs: Array<{
+        hub_id: string;
+        role: string;
+        status: string;
+        hubs: {
+          id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          is_active: boolean;
+          hub_storage_configs: Array<{
+            id: string;
+            name: string;
+            endpoint_url: string;
+            region: string;
+            bucket_name: string;
+            force_path_style: boolean;
+            is_active: boolean;
+          }>;
+        };
+      }>;
     },
     ApiError
   >({
@@ -242,6 +302,30 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
     enabled: !!user?.id,
     staleTime: 30 * 60 * 1000, // 30 minutes - profile rarely changes
   });
+
+  // Check S3 storage health
+  const {
+    data: storageHealth,
+    isLoading: isStorageHealthLoading,
+    refetch: refetchStorageHealth,
+  } = useQuery<{ accessible: boolean; configured: boolean; isAdmin: boolean; error?: string }, ApiError>({
+    queryKey: ['storage-health', currentHub?.id],
+    queryFn: async () => {
+      if (!currentHub?.id) {
+        return { accessible: false, configured: false, isAdmin: false };
+      }
+      const result = await fetchWithAuth(`/api/v1/storage/health?hubId=${currentHub.id}`);
+      return result;
+    },
+    enabled: !!user?.id && !!currentHub?.id,
+    staleTime: 2 * 60 * 1000, // 2 minutes - check health regularly
+    retry: 1, // Only retry once to fail fast
+  });
+
+  // Handler to retry S3 health check
+  const handleRetryHealthCheck = useCallback(() => {
+    refetchStorageHealth();
+  }, [refetchStorageHealth]);
 
   // Fetch breadcrumb chain for current folder
   const { data: breadcrumbData } = useQuery<BreadcrumbItem[], ApiError>({
@@ -283,12 +367,11 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
     setBreadcrumbs(breadcrumbData || []);
   }, [breadcrumbData]);
 
-  // Get images and folders from current folder, filtering out deleting images
+  // Get all images from current folder, filtering out deleting images
   const imageData = useMemo(() => {
-    const filtered = (folderContents?.files || []).filter(
+    return (folderContents?.files || []).filter(
       (image) => !deletingImageIds.includes(image._id),
     );
-    return filtered;
   }, [folderContents?.files, deletingImageIds]);
 
   const handleNavigateTo = useCallback(
@@ -308,6 +391,9 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
   );
 
   const handleCreateFolder = useCallback(() => {
+    // Invalidate folder tree query to refresh the sidebar
+    queryClient.invalidateQueries({ queryKey: ['folder-tree'] });
+
     // Refresh the custom data by re-fetching
     const refreshData = async () => {
       try {
@@ -330,7 +416,7 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
 
     refreshData();
     setIsCreateFolderOpen(false);
-  }, [fetchPage]);
+  }, [fetchPage, queryClient]);
 
   const handleImageAdded = useCallback(() => {
     // Clear all signed URL related queries to ensure fresh URLs
@@ -362,8 +448,9 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
   }, [queryClient, fetchPage]);
 
   const handleImageUpdated = useCallback(
-    (deletedImageId: string | undefined) => {
+    async (deletedImageId: string | undefined) => {
       if (deletedImageId) {
+        // File was deleted - close the modal
         // Optimistically remove the image from custom data
         setCustomFolderData((prevData) => {
           if (!prevData) {
@@ -389,18 +476,61 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
           queryKey: ['signed-url', deletedImageId],
           exact: false,
         });
-      }
 
-      setSelectedImage(null);
+        // Close the modal since the image was deleted
+        setSelectedImage(null);
+      } else {
+        // File was updated (not deleted) - keep modal open with fresh data
+        try {
+          const refreshedData = await fetchPage(1);
+          allPagesRef.current = [refreshedData];
+          currentPageRef.current = 1;
+
+          setCustomFolderData({
+            folders: refreshedData.folders || [],
+            files: refreshedData.files || [],
+            pagination: refreshedData.pagination,
+            total_items: refreshedData.pagination?.total_items || 0,
+          });
+
+          setHasNextPage(!!refreshedData.pagination?.has_next);
+
+          // Update the selectedImage with fresh data from the server
+          // Find the updated image in the fresh data
+          const updatedImage = refreshedData.files.find(
+            (file: GalleryImage) => file._id === selectedImage?._id,
+          );
+
+          if (updatedImage) {
+            setSelectedImage(updatedImage);
+          }
+        } catch (err) {
+          console.error('Error refreshing data after update:', err);
+        }
+      }
     },
-    [queryClient, setSelectedImage],
+    [queryClient, setSelectedImage, fetchPage, selectedImage],
   );
 
-  // Clear selections when folder changes
+  // Clear selections and search when folder changes
   useEffect(() => {
     setSelectedImageIds([]);
     setLastSelectedIndex(-1);
+    setSearchQuery(''); // Clear search when navigating to a different folder
+    // Clean up pointer-events
+    document.body.style.pointerEvents = '';
   }, [currentFolderId]);
+
+  // Clean up pointer-events when selections change
+  useEffect(() => {
+    // Small delay to ensure Radix cleanup has run
+    const timer = setTimeout(() => {
+      if (selectedImageIds.length === 0) {
+        document.body.style.pointerEvents = '';
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [selectedImageIds.length]);
 
   const toggleImageSelection = useCallback(
     (imageId: string, event: React.MouseEvent | MouseEvent) => {
@@ -443,10 +573,46 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
     [setSelectedImage],
   );
 
-  const clearSelections = () => {
+  const clearSelections = useCallback(() => {
     setSelectedImageIds([]);
     setLastSelectedIndex(-1);
-  };
+    // Remove pointer-events: none from body
+    document.body.style.pointerEvents = '';
+  }, []);
+
+  const selectAllImages = useCallback(async () => {
+    // If we have more pages to load, fetch all IDs from the server
+    if (hasNextPage) {
+      try {
+        // Fetch all file IDs without loading full data
+        const endpoint = currentFolderId
+          ? `/api/v1/folders/${currentFolderId}/file-ids`
+          : '/api/v1/folders/root/file-ids';
+
+        const params = new URLSearchParams();
+        // Add search parameter if query is not empty
+        if (searchQuery.trim()) {
+          params.append('search', searchQuery.trim());
+        }
+
+        const result = await fetchWithAuth(
+          `${endpoint}${params.toString() ? '?' + params : ''}`,
+        );
+
+        if (result?.fileIds && Array.isArray(result.fileIds)) {
+          setSelectedImageIds(result.fileIds);
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to fetch all file IDs:', error);
+        // Fall back to selecting only loaded items
+      }
+    }
+
+    // If no more pages or if the API call failed, just select what's loaded
+    const allImageIds = imageData.map((img) => img._id);
+    setSelectedImageIds(allImageIds);
+  }, [imageData, hasNextPage, currentFolderId, searchQuery, fetchWithAuth]);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
@@ -491,7 +657,7 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
 
         // Move each file to the target folder
         for (const fileId of draggedFileIds) {
-          await fetchWithAuth(`/api/v1/folders/files/${fileId}/move`, {
+          await fetchWithAuth(`/api/v1/uploads/${fileId}/move`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -561,14 +727,18 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
   );
 
   // Delete multiple files mutation
-  const deleteMultipleMutation = useMutation<
+  const {
+    mutate: deleteMultipleMutate,
+    isPending: isDeletePending,
+    ...deleteMultipleMutationRest
+  } = useMutation<
     DeleteResponse,
     ApiError,
     string[],
     { previousData: unknown }
   >({
     mutationFn: async (fileIds: string[]) => {
-      return fetchWithAuth('/api/v1/folders/files', {
+      return fetchWithAuth('/api/v1/uploads/bulk', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -612,8 +782,55 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
       });
 
       setSelectedImageIds([]);
-      setIsDeleteDialogOpen(false);
       setDeletingImageIds([]);
+      setIsDeleteDialogOpen(false);
+
+      // Force cleanup of any stray Radix portals/overlays (AlertDialog AND ContextMenu)
+      setTimeout(() => {
+        // Remove alert dialog overlays
+        const alertOverlays = document.querySelectorAll(
+          '[data-slot="alert-dialog-overlay"]',
+        );
+        alertOverlays.forEach((overlay) => {
+          if (overlay.parentElement) {
+            overlay.parentElement.remove();
+          }
+        });
+
+        // Remove context menu portals that might be blocking interactions
+        const contextMenuPortals = document.querySelectorAll(
+          '[data-slot="context-menu-portal"]',
+        );
+        contextMenuPortals.forEach((portal) => {
+          portal.remove();
+        });
+
+        // Also remove any Radix portals that have context menu content
+        const contextMenuContents = document.querySelectorAll(
+          '[data-radix-context-menu-content]',
+        );
+        contextMenuContents.forEach((content) => {
+          const portal = content.closest('[data-radix-portal]');
+          if (portal) {
+            portal.remove();
+          }
+        });
+
+        // Nuclear option: remove ALL Radix portals containing dialogs or context menus
+        const allRadixPortals = document.querySelectorAll(
+          '[data-radix-portal]',
+        );
+        allRadixPortals.forEach((portal) => {
+          // Only remove if it contains context menu or dialog content
+          if (
+            portal.querySelector(
+              '[data-radix-context-menu-content], [data-slot="alert-dialog-content"]',
+            )
+          ) {
+            portal.remove();
+          }
+        });
+      }, 100);
 
       toast.info('Images Deleted', {
         description: `Successfully deleted ${data.deletedCount} images`,
@@ -628,19 +845,46 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
     },
   });
 
-  const handleDeleteButtonClick = () => {
-    if (selectedImageIds.length > 0) {
+  // Recreate the mutation object for passing to child components
+  const deleteMultipleMutation = {
+    mutate: deleteMultipleMutate,
+    isPending: isDeletePending,
+    ...deleteMultipleMutationRest,
+  };
+
+  const handleDeleteButtonClick = useCallback((itemIds?: string[]) => {
+    console.log('handleDeleteButtonClick called', { itemIds, selectedImageIds });
+    // Use provided itemIds or fall back to selectedImageIds
+    const idsToDelete = itemIds || selectedImageIds;
+
+    console.log('idsToDelete:', idsToDelete);
+    if (idsToDelete.length > 0) {
+      // If we're deleting specific items that aren't in selection, update selection first
+      if (itemIds && itemIds.length > 0) {
+        setSelectedImageIds(itemIds);
+      }
+      console.log('Setting isDeleteDialogOpen to true');
       setIsDeleteDialogOpen(true);
+    } else {
+      console.log('No items to delete');
     }
-  };
+  }, [selectedImageIds]);
 
-  const confirmDelete = () => {
+  const confirmDelete = useCallback(() => {
     if (selectedImageIds.length > 0) {
-      deleteMultipleMutation.mutate(selectedImageIds);
+      deleteMultipleMutate(selectedImageIds);
     }
-  };
+  }, [selectedImageIds, deleteMultipleMutate]);
 
-  const getGalleryTitle = () => {
+  const handleAddItem = useCallback(() => {
+    setIsAddDialogOpen(true);
+  }, []);
+
+  const handleLoadMore = useCallback(() => {
+    fetchNextPage();
+  }, [fetchNextPage]);
+
+  const galleryTitle = useMemo(() => {
     if (profileData?.first_name) {
       const firstName = profileData.first_name;
       // Handle possessive correctly - if name ends with 's', just add apostrophe
@@ -650,50 +894,81 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
       return `${possessive} Gallery`;
     }
     return 'My Gallery';
-  };
+  }, [profileData?.first_name]);
 
-  // Don't show full page loader - let GalleryContent handle loading states
+  // S3 Outage Screen - only show when storage is configured but inaccessible
+  if (!isStorageHealthLoading && storageHealth?.configured && storageHealth?.accessible === false) {
+    return (
+      <StorageUnavailableWarning
+        error={storageHealth.error}
+        isRetrying={isStorageHealthLoading}
+        onRetry={handleRetryHealthCheck}
+      />
+    );
+  }
 
-  // Always show the layout with folder tree - let GalleryContent handle all states
+  // Normal layout with folder tree and gallery content
   return (
     <div className="flex flex-1 h-full w-full max-w-screen-2xl mx-auto overflow-hidden">
       {/* Left Sidebar - Folder Tree */}
-      {/* Left Sidebar - Folder Tree */}
-      <div className="w-80 flex-shrink-0 border-r bg-background relative">
-        <div className="absolute inset-0 overflow-hidden">
-          <FolderTreeView
-            currentFolderId={currentFolderId}
-            onFolderSelect={handleNavigateTo}
-            onCreateFolder={() => setIsCreateFolderOpen(true)}
-            onFileDrop={handleFileDrop}
-            className="h-full"
-          />
+      <div className="w-80 flex-shrink-0 border-r bg-background flex flex-col">
+        {/* Folder Tree */}
+        <div className="flex-1 overflow-hidden relative">
+          <div className="absolute inset-0 overflow-hidden">
+            <FolderTreeView
+              currentFolderId={currentFolderId}
+              onFolderSelect={handleNavigateTo}
+              onCreateFolder={() => setIsCreateFolderOpen(true)}
+              onFileDrop={handleFileDrop}
+              className="h-full"
+            />
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
+        {/* Show warning banner only for hub admins when storage is not configured */}
+        {!isStorageHealthLoading && storageHealth?.isAdmin && !storageHealth?.configured && (
+          <div className="pl-4 pr-0 py-4 border-b">
+            <Alert variant="warning">
+              <TriangleAlert className="h-4 w-4" />
+              <AlertTitle>Storage Not Configured</AlertTitle>
+              <AlertDescription>
+                As a hub admin, you need to configure storage for your hub. Go to Settings to set up your storage provider.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
         <GalleryContent
           currentFolderId={currentFolderId}
           itemData={imageData}
+          folders={folderContents?.folders || []}
           breadcrumbs={breadcrumbs}
           selectedItemIds={selectedImageIds}
           deletingItemIds={deletingImageIds}
-          isLoading={isLoading || isProfileLoading}
+          isLoading={isLoading || isProfileLoading || isStorageHealthLoading}
           isError={isError}
           error={error}
           deleteMultipleMutation={deleteMultipleMutation}
-          galleryTitle={getGalleryTitle()}
+          galleryTitle={galleryTitle}
           columnCount={columnCount}
           hasNextPage={hasNextPage || false}
           isFetchingNextPage={isFetchingNextPage}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          searchQuery={searchQuery}
           onNavigateTo={handleNavigateTo}
           onItemClick={handleImageClick}
           onItemSelect={toggleImageSelection}
-          onLoadMore={() => fetchNextPage()}
-          onAddItem={() => setIsAddDialogOpen(true)}
+          onLoadMore={handleLoadMore}
+          onAddItem={handleAddItem}
           onClearSelections={clearSelections}
+          onSelectAll={selectAllImages}
           onDeleteSelected={handleDeleteButtonClick}
+          onSortChange={handleSortChange}
+          onSortOrderToggle={handleSortOrderToggle}
+          onSearchChange={handleSearch}
           onKeyDown={handleKeyDown}
           onFileDrop={handleFileDrop}
         />
@@ -725,7 +1000,14 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
 
       <AlertDialog
         open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
+        onOpenChange={(open) => {
+          // Only allow closing, never opening from external changes
+          if (!open) {
+            setIsDeleteDialogOpen(false);
+            // Remove pointer-events: none from body
+            document.body.style.pointerEvents = '';
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>

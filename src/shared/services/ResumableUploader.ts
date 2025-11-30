@@ -7,6 +7,8 @@
 // The backend handles S3 constraints and optimization, the client just
 // follows the upload flow determined by the server.
 
+import { extractThumbnail } from '../utils/thumbnailExtractor';
+
 export class ResumableUploader {
   private apiBaseUrl: string;
   private token: string;
@@ -26,20 +28,51 @@ export class ResumableUploader {
     file: File,
     onProgress?: (progress: number) => void,
     onChunkComplete?: (chunkNumber: number, totalChunks: number) => void,
+    hubId?: string,
   ): Promise<{ success: boolean; uploadId?: string; error?: string }> {
     try {
+      // Step 0: Extract thumbnail for videos
+      let thumbnailBlob: Blob | null = null;
+      let thumbnailFileName: string | null = null;
+
+      if (file.type.startsWith('video/')) {
+        try {
+          console.log('📹 Extracting thumbnail from video...');
+          thumbnailBlob = await extractThumbnail(file);
+          // Generate thumbnail filename: video.mp4 -> video_thumb.jpg
+          const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+          thumbnailFileName = `${baseName}_thumb.jpg`;
+          console.log('✅ Thumbnail extracted successfully');
+        } catch (error) {
+          console.warn('⚠️ Failed to extract video thumbnail:', error);
+          // Continue with upload even if thumbnail extraction fails
+        }
+      }
+
       // Step 1: Initiate upload and let backend decide upload type
-      const initResponse = await this.initiateUpload(file);
+      const initResponse = await this.initiateUpload(file, hubId, thumbnailFileName);
       if (!initResponse.success) {
         return { success: false, error: initResponse.error };
       }
 
-      const { uploadId, uploadType, totalChunks } = initResponse;
+      const { uploadId, uploadType, totalChunks, thumbnailUploadUrl } = initResponse;
       if (!uploadId) {
         return {
           success: false,
           error: 'Invalid upload initialization response',
         };
+      }
+
+      // Step 1.5: Upload thumbnail if we have one
+      if (thumbnailBlob && thumbnailUploadUrl) {
+        try {
+          console.log('📤 Uploading thumbnail to S3...');
+          await this.uploadThumbnailToS3(thumbnailUploadUrl, thumbnailBlob);
+          console.log('✅ Thumbnail uploaded successfully');
+        } catch (error) {
+          console.warn('⚠️ Failed to upload thumbnail:', error);
+          // Continue with main file upload even if thumbnail upload fails
+        }
       }
 
       // Step 2: Route to appropriate upload method based on backend's decision
@@ -264,11 +297,12 @@ export class ResumableUploader {
     }
   }
 
-  private async initiateUpload(file: File): Promise<{
+  private async initiateUpload(file: File, hubId?: string, thumbnailFileName?: string | null): Promise<{
     success: boolean;
     uploadId?: string;
     uploadType?: 'single' | 'multipart';
     totalChunks?: number;
+    thumbnailUploadUrl?: string;
     error?: string;
   }> {
     try {
@@ -285,6 +319,8 @@ export class ResumableUploader {
             contentType: file.type,
             totalSize: file.size,
             chunkSize: this.chunkSize,
+            hubId,
+            thumbnailFileName: thumbnailFileName || undefined,
           }),
         },
       );
@@ -303,12 +339,27 @@ export class ResumableUploader {
         uploadId: data.uploadId,
         uploadType: data.uploadType,
         totalChunks: data.totalChunks,
+        thumbnailUploadUrl: data.thumbnailUploadUrl,
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error',
       };
+    }
+  }
+
+  private async uploadThumbnailToS3(presignedUrl: string, thumbnailBlob: Blob): Promise<void> {
+    const response = await fetch(presignedUrl, {
+      method: 'PUT',
+      body: thumbnailBlob,
+      headers: {
+        'Content-Type': 'image/jpeg',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to upload thumbnail: ${response.statusText}`);
     }
   }
 

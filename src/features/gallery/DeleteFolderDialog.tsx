@@ -51,7 +51,7 @@ export function DeleteFolderDialog({
       onSuccess?.();
       onClose();
     },
-    onError: (error: any) => {
+    onError: (error: { message?: string }) => {
       toast.error('Failed to delete folder', {
         description:
           error?.message || 'The folder may contain files or subfolders.',

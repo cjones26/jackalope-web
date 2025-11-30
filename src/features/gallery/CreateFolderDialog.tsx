@@ -50,15 +50,21 @@ export function CreateFolderDialog({
 
   const createFolderMutation = useMutation({
     mutationFn: async (data: CreateFolderData) => {
+      const payload: { name: string; parent_id?: string } = {
+        name: data.name,
+      };
+
+      // Only include parent_id if it's a valid value
+      if (parentId) {
+        payload.parent_id = parentId;
+      }
+
       return fetchWithAuth('/api/v1/folders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: data.name,
-          parent_id: parentId,
-        }),
+        body: JSON.stringify(payload),
       });
     },
     onSuccess: () => {
@@ -67,7 +73,7 @@ export function CreateFolderDialog({
       onClose();
       onSuccess();
     },
-    onError: (error: any) => {
+    onError: (error: { statusText?: string }) => {
       toast.error('Failed to create folder', {
         description: error.statusText || 'Please try again',
       });

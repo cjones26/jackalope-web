@@ -20,7 +20,7 @@ function RouteComponent() {
   const { session } = useSupabase();
 
   if (session) {
-    return <Navigate to="/profile" />;
+    return <Navigate to="/gallery" />;
   }
 
   return (

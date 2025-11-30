@@ -7,7 +7,7 @@ import { useApi } from '@/shared/hooks/useApi';
 import { Spinner } from '@/shared/ui/Spinner';
 import { H3 } from '@/shared/ui/typography';
 
-export const Route = createFileRoute('/(protected)/profile')({
+export const Route = createFileRoute('/(protected)/settings')({
   component: RouteComponent,
 });
 
@@ -31,8 +31,10 @@ function RouteComponent() {
       return result.data;
     },
     enabled: !!user?.id,
+    refetchOnMount: 'always',
   });
 
+  // Early returns AFTER all hooks
   if (isLoading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
@@ -49,14 +51,9 @@ function RouteComponent() {
     );
   }
 
-  // Check if profile exists with data
-  const profileExists =
-    profile && (profile.first_name || profile.last_name || profile.avatar_url);
-
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-y-4 m-4">
-      {/* Profile Section */}
-      <H3>{profileExists ? 'Update Profile' : 'Create Profile'}</H3>
+    <div className="flex flex-1 flex-col items-start gap-y-6 m-4 max-w-4xl mx-auto w-full">
+      <H3>Settings</H3>
       <ProfileForm profile={profile || null} />
     </div>
   );

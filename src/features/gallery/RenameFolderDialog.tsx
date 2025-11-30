@@ -53,7 +53,7 @@ export function RenameFolderDialog({
       onSuccess?.();
       onClose();
     },
-    onError: (error: any) => {
+    onError: (error: { message?: string }) => {
       toast.error('Failed to rename folder', {
         description: error?.message || 'Please try again.',
       });

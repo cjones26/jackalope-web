@@ -7,13 +7,347 @@ export type Json =
   | Json[];
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: '12.2.12 (cd3cf9e)';
   };
   public: {
     Tables: {
+      file_shares: {
+        Row: {
+          allow_download: boolean | null;
+          created_at: string | null;
+          download_count: number | null;
+          expires_at: string | null;
+          id: string;
+          last_accessed_at: string | null;
+          max_downloads: number | null;
+          permission: string;
+          share_token: string | null;
+          shared_by: string;
+          shared_with: string | null;
+          upload_id: string | null;
+        };
+        Insert: {
+          allow_download?: boolean | null;
+          created_at?: string | null;
+          download_count?: number | null;
+          expires_at?: string | null;
+          id?: string;
+          last_accessed_at?: string | null;
+          max_downloads?: number | null;
+          permission: string;
+          share_token?: string | null;
+          shared_by: string;
+          shared_with?: string | null;
+          upload_id?: string | null;
+        };
+        Update: {
+          allow_download?: boolean | null;
+          created_at?: string | null;
+          download_count?: number | null;
+          expires_at?: string | null;
+          id?: string;
+          last_accessed_at?: string | null;
+          max_downloads?: number | null;
+          permission?: string;
+          share_token?: string | null;
+          shared_by?: string;
+          shared_with?: string | null;
+          upload_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'file_shares_shared_by_fkey';
+            columns: ['shared_by'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'file_shares_shared_with_fkey';
+            columns: ['shared_with'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'file_shares_upload_id_fkey';
+            columns: ['upload_id'];
+            isOneToOne: false;
+            referencedRelation: 'uploads';
+            referencedColumns: ['upload_id'];
+          },
+        ];
+      };
+      folder_shares: {
+        Row: {
+          allow_download: boolean | null;
+          created_at: string | null;
+          download_count: number | null;
+          expires_at: string | null;
+          folder_id: string | null;
+          id: string;
+          last_accessed_at: string | null;
+          max_downloads: number | null;
+          permission: string;
+          recursive: boolean | null;
+          share_token: string | null;
+          shared_by: string;
+          shared_with: string | null;
+        };
+        Insert: {
+          allow_download?: boolean | null;
+          created_at?: string | null;
+          download_count?: number | null;
+          expires_at?: string | null;
+          folder_id?: string | null;
+          id?: string;
+          last_accessed_at?: string | null;
+          max_downloads?: number | null;
+          permission: string;
+          recursive?: boolean | null;
+          share_token?: string | null;
+          shared_by: string;
+          shared_with?: string | null;
+        };
+        Update: {
+          allow_download?: boolean | null;
+          created_at?: string | null;
+          download_count?: number | null;
+          expires_at?: string | null;
+          folder_id?: string | null;
+          id?: string;
+          last_accessed_at?: string | null;
+          max_downloads?: number | null;
+          permission?: string;
+          recursive?: boolean | null;
+          share_token?: string | null;
+          shared_by?: string;
+          shared_with?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'folder_shares_folder_id_fkey';
+            columns: ['folder_id'];
+            isOneToOne: false;
+            referencedRelation: 'folders';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'folder_shares_shared_by_fkey';
+            columns: ['shared_by'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'folder_shares_shared_with_fkey';
+            columns: ['shared_with'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      folders: {
+        Row: {
+          created_at: string | null;
+          description: string | null;
+          id: string;
+          name: string;
+          owner_id: string;
+          parent_id: string | null;
+          path: string;
+          updated_at: string | null;
+        };
+        Insert: {
+          created_at?: string | null;
+          description?: string | null;
+          id?: string;
+          name: string;
+          owner_id: string;
+          parent_id?: string | null;
+          path: string;
+          updated_at?: string | null;
+        };
+        Update: {
+          created_at?: string | null;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          owner_id?: string;
+          parent_id?: string | null;
+          path?: string;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'folders_owner_id_fkey';
+            columns: ['owner_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'folders_parent_id_fkey';
+            columns: ['parent_id'];
+            isOneToOne: false;
+            referencedRelation: 'folders';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      uploads: {
+        Row: {
+          bucket_name: string;
+          completed_at: string | null;
+          content_type: string;
+          created_at: string | null;
+          file_key: string;
+          file_size_bytes: number | null;
+          filename: string;
+          final_bucket_name: string | null;
+          final_file_key: string | null;
+          folder_id: string | null;
+          id: string;
+          is_folder_cover: boolean | null;
+          parts: Json | null;
+          processing_message: string | null;
+          processing_progress: number | null;
+          processing_status: string | null;
+          sort_order: number | null;
+          status: string;
+          storage_config_id: string | null;
+          thumbnail_file_key: string | null;
+          total_size: number;
+          updated_at: string | null;
+          upload_id: string;
+          upload_type: string;
+          user_id: string;
+        };
+        Insert: {
+          bucket_name: string;
+          completed_at?: string | null;
+          content_type: string;
+          created_at?: string | null;
+          file_key: string;
+          file_size_bytes?: number | null;
+          filename: string;
+          final_bucket_name?: string | null;
+          final_file_key?: string | null;
+          folder_id?: string | null;
+          id?: string;
+          is_folder_cover?: boolean | null;
+          parts?: Json | null;
+          processing_message?: string | null;
+          processing_progress?: number | null;
+          processing_status?: string | null;
+          sort_order?: number | null;
+          status: string;
+          storage_config_id?: string | null;
+          thumbnail_file_key?: string | null;
+          total_size: number;
+          updated_at?: string | null;
+          upload_id: string;
+          upload_type?: string;
+          user_id: string;
+        };
+        Update: {
+          bucket_name?: string;
+          completed_at?: string | null;
+          content_type?: string;
+          created_at?: string | null;
+          file_key?: string;
+          file_size_bytes?: number | null;
+          filename?: string;
+          final_bucket_name?: string | null;
+          final_file_key?: string | null;
+          folder_id?: string | null;
+          id?: string;
+          is_folder_cover?: boolean | null;
+          parts?: Json | null;
+          processing_message?: string | null;
+          processing_progress?: number | null;
+          processing_status?: string | null;
+          sort_order?: number | null;
+          status?: string;
+          storage_config_id?: string | null;
+          thumbnail_file_key?: string | null;
+          total_size?: number;
+          updated_at?: string | null;
+          upload_id?: string;
+          upload_type?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'uploads_folder_id_fkey';
+            columns: ['folder_id'];
+            isOneToOne: false;
+            referencedRelation: 'folders';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'uploads_storage_config_id_fkey';
+            columns: ['storage_config_id'];
+            isOneToOne: false;
+            referencedRelation: 'user_storage_configs';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      user_storage_configs: {
+        Row: {
+          access_key_id: string;
+          bucket_name: string;
+          created_at: string | null;
+          endpoint_url: string;
+          force_path_style: boolean | null;
+          id: string;
+          last_used_at: string | null;
+          region: string;
+          secret_access_key: string;
+          updated_at: string | null;
+          user_id: string;
+        };
+        Insert: {
+          access_key_id: string;
+          bucket_name: string;
+          created_at?: string | null;
+          endpoint_url: string;
+          force_path_style?: boolean | null;
+          id?: string;
+          last_used_at?: string | null;
+          region: string;
+          secret_access_key: string;
+          updated_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          access_key_id?: string;
+          bucket_name?: string;
+          created_at?: string | null;
+          endpoint_url?: string;
+          force_path_style?: boolean | null;
+          id?: string;
+          last_used_at?: string | null;
+          region?: string;
+          secret_access_key?: string;
+          updated_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'user_storage_configs_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: true;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       users: {
         Row: {
           avatar_url: string | null;
@@ -46,7 +380,40 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      cleanup_orphaned_avatars: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          deleted_file: string;
+        }[];
+      };
+      cleanup_stale_uploads: {
+        Args: { hours_old?: number };
+        Returns: number;
+      };
+      get_decrypted_storage_config: {
+        Args: { config_id: string; requesting_user_id: string };
+        Returns: {
+          access_key_id: string;
+          bucket_name: string;
+          created_at: string;
+          endpoint_url: string;
+          force_path_style: boolean;
+          id: string;
+          last_used_at: string;
+          region: string;
+          secret_access_key: string;
+          updated_at: string;
+          user_id: string;
+        }[];
+      };
+      identify_orphaned_avatars: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          file_size: number;
+          last_modified: string;
+          orphaned_file: string;
+        }[];
+      };
     };
     Enums: {
       [_ in never]: never;

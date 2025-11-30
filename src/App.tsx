@@ -1,6 +1,7 @@
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 
 import { ApiProvider } from '@/shared/context/api/ApiProvider';
+import { HubProvider } from '@/shared/context/hub';
 import { useSupabase } from '@/shared/context/supabase';
 import { SupabaseProvider } from '@/shared/context/supabase/SupabaseProvider';
 import { ThemeProvider } from '@/shared/context/theme/ThemeProvider';
@@ -33,9 +34,11 @@ export default function App() {
   return (
     <SupabaseProvider router={router}>
       <ApiProvider>
-        <ThemeProvider storageKey="jackalope-theme">
-          <InnerApp />
-        </ThemeProvider>
+        <HubProvider>
+          <ThemeProvider storageKey="jackalope-theme">
+            <InnerApp />
+          </ThemeProvider>
+        </HubProvider>
       </ApiProvider>
     </SupabaseProvider>
   );

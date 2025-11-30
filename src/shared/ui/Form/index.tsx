@@ -3,6 +3,7 @@ export {
   FormControl,
   FormDescription,
   FormField,
+  FormInput,
   FormItem,
   FormLabel,
   FormMessage,

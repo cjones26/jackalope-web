@@ -41,7 +41,7 @@ export const SupabaseProvider = ({
       throw error;
     }
 
-    router.navigate({ to: '/profile' });
+    router.navigate({ to: '/gallery' });
   };
 
   const signOut = async () => {
@@ -99,7 +99,7 @@ export const SupabaseProvider = ({
     }
 
     initialize();
-  }, []);
+  }, [router]);
 
   if (!initialized) {
     return (

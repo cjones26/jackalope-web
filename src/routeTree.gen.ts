@@ -14,7 +14,7 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as publicRouteImport } from './routes/(public)/route'
 import { Route as protectedRouteImport } from './routes/(protected)/route'
 import { Route as IndexImport } from './routes/index'
-import { Route as protectedProfileImport } from './routes/(protected)/profile'
+import { Route as protectedSettingsImport } from './routes/(protected)/settings'
 import { Route as protectedGalleryIndexImport } from './routes/(protected)/gallery/index'
 import { Route as publicauthSignUpImport } from './routes/(public)/(auth)/sign-up'
 import { Route as publicauthSignInImport } from './routes/(public)/(auth)/sign-in'
@@ -39,9 +39,9 @@ const IndexRoute = IndexImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const protectedProfileRoute = protectedProfileImport.update({
-  id: '/profile',
-  path: '/profile',
+const protectedSettingsRoute = protectedSettingsImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => protectedRouteRoute,
 } as any)
 
@@ -100,11 +100,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof publicRouteImport
       parentRoute: typeof rootRoute
     }
-    '/(protected)/profile': {
-      id: '/(protected)/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof protectedProfileImport
+    '/(protected)/settings': {
+      id: '/(protected)/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof protectedSettingsImport
       parentRoute: typeof protectedRouteImport
     }
     '/(protected)/gallery/$folderId': {
@@ -148,13 +148,13 @@ declare module '@tanstack/react-router' {
 // Create and export the route tree
 
 interface protectedRouteRouteChildren {
-  protectedProfileRoute: typeof protectedProfileRoute
+  protectedSettingsRoute: typeof protectedSettingsRoute
   protectedGalleryFolderIdRoute: typeof protectedGalleryFolderIdRoute
   protectedGalleryIndexRoute: typeof protectedGalleryIndexRoute
 }
 
 const protectedRouteRouteChildren: protectedRouteRouteChildren = {
-  protectedProfileRoute: protectedProfileRoute,
+  protectedSettingsRoute: protectedSettingsRoute,
   protectedGalleryFolderIdRoute: protectedGalleryFolderIdRoute,
   protectedGalleryIndexRoute: protectedGalleryIndexRoute,
 }
@@ -181,7 +181,7 @@ const publicRouteRouteWithChildren = publicRouteRoute._addFileChildren(
 
 export interface FileRoutesByFullPath {
   '/': typeof publicRouteRouteWithChildren
-  '/profile': typeof protectedProfileRoute
+  '/settings': typeof protectedSettingsRoute
   '/gallery/$folderId': typeof protectedGalleryFolderIdRoute
   '/check-email': typeof publicauthCheckEmailRoute
   '/sign-in': typeof publicauthSignInRoute
@@ -191,7 +191,7 @@ export interface FileRoutesByFullPath {
 
 export interface FileRoutesByTo {
   '/': typeof publicRouteRouteWithChildren
-  '/profile': typeof protectedProfileRoute
+  '/settings': typeof protectedSettingsRoute
   '/gallery/$folderId': typeof protectedGalleryFolderIdRoute
   '/check-email': typeof publicauthCheckEmailRoute
   '/sign-in': typeof publicauthSignInRoute
@@ -204,7 +204,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/(protected)': typeof protectedRouteRouteWithChildren
   '/(public)': typeof publicRouteRouteWithChildren
-  '/(protected)/profile': typeof protectedProfileRoute
+  '/(protected)/settings': typeof protectedSettingsRoute
   '/(protected)/gallery/$folderId': typeof protectedGalleryFolderIdRoute
   '/(public)/(auth)/check-email': typeof publicauthCheckEmailRoute
   '/(public)/(auth)/sign-in': typeof publicauthSignInRoute
@@ -216,7 +216,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/profile'
+    | '/settings'
     | '/gallery/$folderId'
     | '/check-email'
     | '/sign-in'
@@ -225,7 +225,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/profile'
+    | '/settings'
     | '/gallery/$folderId'
     | '/check-email'
     | '/sign-in'
@@ -236,7 +236,7 @@ export interface FileRouteTypes {
     | '/'
     | '/(protected)'
     | '/(public)'
-    | '/(protected)/profile'
+    | '/(protected)/settings'
     | '/(protected)/gallery/$folderId'
     | '/(public)/(auth)/check-email'
     | '/(public)/(auth)/sign-in'
@@ -278,7 +278,7 @@ export const routeTree = rootRoute
     "/(protected)": {
       "filePath": "(protected)/route.tsx",
       "children": [
-        "/(protected)/profile",
+        "/(protected)/settings",
         "/(protected)/gallery/$folderId",
         "/(protected)/gallery/"
       ]
@@ -291,8 +291,8 @@ export const routeTree = rootRoute
         "/(public)/(auth)/sign-up"
       ]
     },
-    "/(protected)/profile": {
-      "filePath": "(protected)/profile.tsx",
+    "/(protected)/settings": {
+      "filePath": "(protected)/settings.tsx",
       "parent": "/(protected)"
     },
     "/(protected)/gallery/$folderId": {

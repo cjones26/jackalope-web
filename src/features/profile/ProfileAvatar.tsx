@@ -146,6 +146,9 @@ export function ProfileAvatar({
               queryClient.invalidateQueries({
                 queryKey: ['user', user?.id],
               });
+              queryClient.invalidateQueries({
+                queryKey: ['user-nav', user?.id],
+              });
             } catch (error) {
               console.error('Upload error:', error);
 
@@ -336,6 +339,7 @@ export function ProfileAvatar({
 
       // Invalidate queries to refresh avatar everywhere
       queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['user-nav', user?.id] });
     } catch (error) {
       console.error('Error removing avatar:', error);
       setUploadError('Failed to remove avatar');
