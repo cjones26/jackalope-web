@@ -1,12 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { User, Settings } from 'lucide-react';
+import { User, Settings, Users } from 'lucide-react';
 
 import { useHub } from '@/shared/context/hub';
 import { useSupabase } from '@/shared/context/supabase';
 import { useApi } from '@/shared/hooks/useApi';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/Tabs';
-import { ProfileInfoCard } from '@/features/settings';
+import { ProfileInfoCard, HubMembersCard } from '@/features/settings';
 import { HubSettingsForm } from '@/features/hubs/components/HubSettingsForm';
 
 interface ProfileFormProps {
@@ -73,16 +73,22 @@ export function ProfileForm({ profile }: ProfileFormProps) {
   return (
     <div className="w-full max-w-4xl">
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-3' : 'grid-cols-1'}`}>
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <User className="h-4 w-4" />
             Profile
           </TabsTrigger>
           {isAdmin && (
-            <TabsTrigger value="storage-config" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Storage Configuration
-            </TabsTrigger>
+            <>
+              <TabsTrigger value="user-management" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                User Management
+              </TabsTrigger>
+              <TabsTrigger value="storage-config" className="flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Storage Configuration
+              </TabsTrigger>
+            </>
           )}
         </TabsList>
 
@@ -97,14 +103,20 @@ export function ProfileForm({ profile }: ProfileFormProps) {
         </TabsContent>
 
         {isAdmin && currentHub && (
-          <TabsContent value="storage-config" className="mt-6">
-            <HubSettingsForm
-              hubId={currentHub.id}
-              hubName={currentHub.name}
-              isAdmin={isAdmin}
-              storageConfig={storageConfig || null}
-            />
-          </TabsContent>
+          <>
+            <TabsContent value="user-management" className="mt-6">
+              <HubMembersCard hubId={currentHub.id} isAdmin={isAdmin} />
+            </TabsContent>
+
+            <TabsContent value="storage-config" className="mt-6">
+              <HubSettingsForm
+                hubId={currentHub.id}
+                hubName={currentHub.name}
+                isAdmin={isAdmin}
+                storageConfig={storageConfig || null}
+              />
+            </TabsContent>
+          </>
         )}
       </Tabs>
     </div>

@@ -6,7 +6,7 @@ import {
   redirect,
 } from '@tanstack/react-router';
 import { ImageIcon, LogOut } from 'lucide-react';
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 
 import DefaultAvatar from '@/assets/default-avatar.jpg';
 import Icon from '@/assets/icon.png';
@@ -109,6 +109,13 @@ function RouteComponent() {
   const handleHubChange = useCallback((hubId: string) => {
     setSelectedHubId(hubId);
   }, [setSelectedHubId]);
+
+  // Auto-select first hub if no hub is selected
+  useEffect(() => {
+    if (userHubs.length > 0 && !selectedHubId) {
+      setSelectedHubId(userHubs[0].id);
+    }
+  }, [userHubs, selectedHubId, setSelectedHubId]);
 
   // Generate avatar initials from profile data if available
   const getInitials = () => {

@@ -912,7 +912,9 @@ export function UnifiedItemUpload({
         {/* Error state */}
         {uploadMutation.isError && (
           <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-            Upload failed. Please try again.
+            {uploadMutation.error instanceof Error
+              ? uploadMutation.error.message
+              : (uploadMutation.error as any)?.message || 'Upload failed. Please try again.'}
           </div>
         )}
 

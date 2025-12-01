@@ -67,7 +67,7 @@ export function ProfileInfoCard({
 
   return (
     <Card className="overflow-hidden">
-      <CardContent className="p-6">
+      <CardContent>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleSubmit)}

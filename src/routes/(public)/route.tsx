@@ -3,6 +3,7 @@ import {
   Link,
   Navigate,
   Outlet,
+  useLocation,
 } from '@tanstack/react-router';
 
 import Icon from '@/assets/icon.png';
@@ -18,8 +19,12 @@ export const Route = createFileRoute('/(public)')({
 function RouteComponent() {
   const { colorScheme } = useTheme();
   const { session } = useSupabase();
+  const location = useLocation();
 
-  if (session) {
+  // Allow signup-success page to be viewed even with active session
+  const isSignupSuccessPage = location.pathname === '/signup-success';
+
+  if (session && !isSignupSuccessPage) {
     return <Navigate to="/gallery" />;
   }
 

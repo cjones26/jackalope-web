@@ -18,16 +18,28 @@ export const SupabaseProvider = ({
   const [session, setSession] = useState<Session | null>(null);
   const [initialized, setInitialized] = useState<boolean>(false);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    metadata?: { firstName?: string; lastName?: string }
+  ) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: metadata
+        ? {
+            data: {
+              first_name: metadata.firstName,
+              last_name: metadata.lastName,
+            },
+          }
+        : undefined,
     });
 
     if (error) {
       throw error;
     } else {
-      router.navigate({ to: '/check-email' });
+      router.navigate({ to: '/signup-success' });
     }
   };
 

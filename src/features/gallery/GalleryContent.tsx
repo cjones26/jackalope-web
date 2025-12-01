@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { memo, useMemo } from 'react';
 
+import { useHub } from '@/shared/context/hub';
 import { Button } from '@/shared/ui/Button';
 import {
   DropdownMenu,
@@ -115,21 +116,25 @@ const GalleryHeader = memo(function GalleryHeader({
   breadcrumbs,
   onNavigateTo,
   onAddItem,
+  canUpload,
 }: {
   galleryTitle: string;
   breadcrumbs: BreadcrumbItem[];
   onNavigateTo: (folderId: string | null) => void;
   onAddItem: () => void;
+  canUpload: boolean;
 }) {
   return (
     <>
       <FolderBreadcrumbs breadcrumbs={breadcrumbs} onNavigate={onNavigateTo} />
       <div className="flex justify-between items-center">
         <H3>{galleryTitle}</H3>
-        <Button onClick={onAddItem}>
-          <Plus className="h-4 w-4" />
-          Add Item(s)
-        </Button>
+        {canUpload && (
+          <Button onClick={onAddItem}>
+            <Plus className="h-4 w-4" />
+            Add Item(s)
+          </Button>
+        )}
       </div>
     </>
   );
@@ -303,6 +308,9 @@ export const GalleryContent = memo(function GalleryContent({
   onKeyDown,
   onFileDrop,
 }: GalleryContentProps) {
+  const { currentHub } = useHub();
+  const canUpload = currentHub?.role !== 'viewer';
+
   const isMultiSelectMode = selectedItemIds.length > 0;
   const hasContent = itemData.length > 0 || folders.length > 0;
   const isSearching = searchQuery.trim().length > 0;
@@ -329,6 +337,7 @@ export const GalleryContent = memo(function GalleryContent({
           breadcrumbs={breadcrumbs}
           onNavigateTo={onNavigateTo}
           onAddItem={onAddItem}
+          canUpload={canUpload}
         />
         <EmptyState message={emptyStateMessage} />
       </div>
@@ -386,10 +395,12 @@ export const GalleryContent = memo(function GalleryContent({
                 >
                   Select All
                 </Button>
-                <Button onClick={onAddItem} disabled={isLoading}>
-                  <Plus className="h-4 w-4" />
-                  Add Item(s)
-                </Button>
+                {canUpload && (
+                  <Button onClick={onAddItem} disabled={isLoading}>
+                    <Plus className="h-4 w-4" />
+                    Add Item(s)
+                  </Button>
+                )}
               </>
             )}
           </div>

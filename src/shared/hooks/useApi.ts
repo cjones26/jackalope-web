@@ -126,5 +126,37 @@ export const useApi = () => {
     [signOut],
   ); // Remove accessToken dependency to prevent stale token issues
 
-  return { fetchWithAuth };
+  const fetchPublic = useCallback(
+    async (url: string, options: RequestInit = {}) => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}${url}`, {
+          ...options,
+        });
+
+        if (!response.ok) {
+          // Try to get error details from response body
+          let errorDetails;
+          try {
+            errorDetails = await response.json();
+          } catch {
+            errorDetails = { message: response.statusText };
+          }
+
+          throw {
+            status: response.status,
+            statusText: response.statusText,
+            ...errorDetails,
+          };
+        }
+
+        return response.json();
+      } catch (fetchError) {
+        console.error('Fetch error:', fetchError);
+        throw fetchError;
+      }
+    },
+    [],
+  );
+
+  return { fetchWithAuth, fetchPublic };
 };

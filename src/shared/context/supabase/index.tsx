@@ -5,7 +5,11 @@ export type SupabaseContextProps = {
   user: User | null;
   session: Session | null;
   initialized?: boolean;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    metadata?: { firstName?: string; lastName?: string }
+  ) => Promise<void>;
   signInWithPassword: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };

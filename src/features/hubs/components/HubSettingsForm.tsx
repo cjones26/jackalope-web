@@ -124,12 +124,12 @@ export function HubSettingsForm({
   hubId,
   hubName,
   isAdmin,
-  storageConfig
+  storageConfig,
 }: HubSettingsFormProps) {
   const { fetchWithAuth } = useApi();
   const queryClient = useQueryClient();
   const [selectedProvider, setSelectedProvider] = useState<string | null>(
-    storageConfig?.provider_type || null
+    storageConfig?.provider_type || null,
   );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -197,7 +197,9 @@ export function HubSettingsForm({
       return response;
     },
     onSuccess: () => {
-      toast.success('Storage configuration deleted. All file metadata has been removed.');
+      toast.success(
+        'Storage configuration deleted. All file metadata has been removed.',
+      );
       queryClient.invalidateQueries({ queryKey: ['user'] });
       queryClient.invalidateQueries({ queryKey: ['storage-health'] });
       setShowDeleteConfirm(false);
@@ -218,11 +220,11 @@ export function HubSettingsForm({
 
   const handleProviderSelect = (providerId: string) => {
     setSelectedProvider(providerId);
-    const provider = STORAGE_PROVIDERS.find(p => p.id === providerId);
+    const provider = STORAGE_PROVIDERS.find((p) => p.id === providerId);
     if (provider) {
       if (provider.id === 'custom') {
         // Clear fields for custom provider
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           providerType: providerId,
           endpointUrl: '',
@@ -232,7 +234,7 @@ export function HubSettingsForm({
         }));
       } else {
         // Pre-fill fields for known providers
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           providerType: providerId,
           endpointUrl: provider.endpoint,
@@ -246,12 +248,18 @@ export function HubSettingsForm({
   const getProviderIcon = (iconName: string, className: string = 'h-5 w-5') => {
     const props = { className };
     switch (iconName) {
-      case 'cloud': return <Cloud {...props} />;
-      case 'laptop': return <Laptop {...props} />;
-      case 'server': return <Server {...props} />;
-      case 'database': return <Database {...props} />;
-      case 'settings': return <Settings2 {...props} />;
-      default: return <HardDrive {...props} />;
+      case 'cloud':
+        return <Cloud {...props} />;
+      case 'laptop':
+        return <Laptop {...props} />;
+      case 'server':
+        return <Server {...props} />;
+      case 'database':
+        return <Database {...props} />;
+      case 'settings':
+        return <Settings2 {...props} />;
+      default:
+        return <HardDrive {...props} />;
     }
   };
 
@@ -264,7 +272,9 @@ export function HubSettingsForm({
               <Lock className="h-6 w-6 text-gray-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-base mb-1">Admin Access Required</h3>
+              <h3 className="font-semibold text-base mb-1">
+                Admin Access Required
+              </h3>
               <p className="text-sm text-muted-foreground">
                 Only hub administrators can configure storage settings.
               </p>
@@ -279,7 +289,7 @@ export function HubSettingsForm({
 
   return (
     <Card className="overflow-hidden">
-      <CardContent className="p-6">
+      <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Provider Selection - Only show when not configured */}
           {!isConfigured && (
@@ -289,8 +299,12 @@ export function HubSettingsForm({
                   <Globe className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold">Choose Your Provider</h3>
-                  <p className="text-sm text-muted-foreground">Select the storage service you want to connect</p>
+                  <h3 className="text-base font-semibold">
+                    Choose Your Provider
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Select the storage service you want to connect
+                  </p>
                 </div>
               </div>
 
@@ -309,9 +323,13 @@ export function HubSettingsForm({
                       }`}
                     >
                       <div className="flex items-start justify-between mb-3">
-                        <div className={`flex h-12 w-12 items-center justify-center rounded-lg transition-colors ${
-                          isSelected ? 'bg-primary/10' : 'bg-gray-100 dark:bg-gray-800'
-                        }`}>
+                        <div
+                          className={`flex h-12 w-12 items-center justify-center rounded-lg transition-colors ${
+                            isSelected
+                              ? 'bg-primary/10'
+                              : 'bg-gray-100 dark:bg-gray-800'
+                          }`}
+                        >
                           {getProviderIcon(provider.icon, 'h-6 w-6')}
                         </div>
                         {isSelected && (
@@ -320,7 +338,9 @@ export function HubSettingsForm({
                           </div>
                         )}
                       </div>
-                      <h4 className="font-semibold text-sm mb-1.5">{provider.name}</h4>
+                      <h4 className="font-semibold text-sm mb-1.5">
+                        {provider.name}
+                      </h4>
                       <p className="text-xs text-muted-foreground leading-relaxed">
                         {provider.description}
                       </p>
@@ -342,7 +362,8 @@ export function HubSettingsForm({
                   Storage Configuration Locked
                 </h3>
                 <p className="text-sm text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
-                  Storage configuration is immutable once saved. Settings cannot be changed to ensure data integrity.
+                  Storage configuration is immutable once saved. Settings cannot
+                  be changed to ensure data integrity.
                 </p>
                 {selectedProvider && (
                   <div className="mt-2.5 flex items-center gap-2">
@@ -350,8 +371,13 @@ export function HubSettingsForm({
                       Provider:
                     </span>
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-100/80 dark:bg-amber-900/40 text-xs font-medium text-amber-800 dark:text-amber-300">
-                      {getProviderIcon(STORAGE_PROVIDERS.find(p => p.id === selectedProvider)?.icon || 'server', 'h-3.5 w-3.5')}
-                      {STORAGE_PROVIDERS.find(p => p.id === selectedProvider)?.name || selectedProvider}
+                      {getProviderIcon(
+                        STORAGE_PROVIDERS.find((p) => p.id === selectedProvider)
+                          ?.icon || 'server',
+                        'h-3.5 w-3.5',
+                      )}
+                      {STORAGE_PROVIDERS.find((p) => p.id === selectedProvider)
+                        ?.name || selectedProvider}
                     </span>
                   </div>
                 )}
@@ -361,121 +387,167 @@ export function HubSettingsForm({
 
           {/* Connection Details */}
           <div className="space-y-5 bg-gray-50/50 dark:bg-gray-900/50 p-6 rounded-xl border">
+            <div className="space-y-2.5">
+              <Label
+                htmlFor="endpointUrl"
+                className="text-sm font-semibold flex items-center gap-2"
+              >
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                Endpoint URL
+              </Label>
+              <Input
+                id="endpointUrl"
+                type="url"
+                value={formData.endpointUrl}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    endpointUrl: e.target.value,
+                  }))
+                }
+                placeholder="https://s3.amazonaws.com"
+                disabled={isConfigured}
+                className="h-11"
+                required
+              />
+              <p className="text-xs text-muted-foreground ml-6">
+                S3-compatible storage endpoint (e.g., AWS S3, MinIO, Cloudflare
+                R2)
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2.5">
-                <Label htmlFor="endpointUrl" className="text-sm font-semibold flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  Endpoint URL
+                <Label
+                  htmlFor="region"
+                  className="text-sm font-semibold flex items-center gap-2"
+                >
+                  <Zap className="h-4 w-4 text-muted-foreground" />
+                  Region
                 </Label>
                 <Input
-                  id="endpointUrl"
-                  type="url"
-                  value={formData.endpointUrl}
-                  onChange={(e) => setFormData(prev => ({ ...prev, endpointUrl: e.target.value }))}
-                  placeholder="https://s3.amazonaws.com"
+                  id="region"
+                  value={formData.region}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, region: e.target.value }))
+                  }
+                  placeholder="us-east-1"
                   disabled={isConfigured}
                   className="h-11"
                   required
                 />
-                <p className="text-xs text-muted-foreground ml-6">
-                  S3-compatible storage endpoint (e.g., AWS S3, MinIO, Cloudflare R2)
-                </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-2.5">
-                  <Label htmlFor="region" className="text-sm font-semibold flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-muted-foreground" />
-                    Region
-                  </Label>
-                  <Input
-                    id="region"
-                    value={formData.region}
-                    onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
-                    placeholder="us-east-1"
-                    disabled={isConfigured}
-                    className="h-11"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2.5">
-                  <Label htmlFor="bucketName" className="text-sm font-semibold flex items-center gap-2">
-                    <HardDrive className="h-4 w-4 text-muted-foreground" />
-                    Bucket Name
-                  </Label>
-                  <Input
-                    id="bucketName"
-                    value={formData.bucketName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bucketName: e.target.value }))}
-                    placeholder="my-bucket"
-                    disabled={isConfigured}
-                    className="h-11"
-                    required
-                  />
-                </div>
+              <div className="space-y-2.5">
+                <Label
+                  htmlFor="bucketName"
+                  className="text-sm font-semibold flex items-center gap-2"
+                >
+                  <HardDrive className="h-4 w-4 text-muted-foreground" />
+                  Bucket Name
+                </Label>
+                <Input
+                  id="bucketName"
+                  value={formData.bucketName}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      bucketName: e.target.value,
+                    }))
+                  }
+                  placeholder="my-bucket"
+                  disabled={isConfigured}
+                  className="h-11"
+                  required
+                />
               </div>
             </div>
+          </div>
 
           {/* Security Credentials */}
           <div className="space-y-5 bg-gray-50/50 dark:bg-gray-900/50 p-6 rounded-xl border">
-              <div className="space-y-2.5">
-                <Label htmlFor="accessKeyId" className="text-sm font-semibold flex items-center gap-2">
-                  <Lock className="h-4 w-4 text-muted-foreground" />
-                  Access Key ID
-                </Label>
-                <Input
-                  id="accessKeyId"
-                  type="password"
-                  value={formData.accessKeyId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, accessKeyId: e.target.value }))}
-                  placeholder={isConfigured ? '••••••••' : 'Enter access key ID'}
-                  disabled={isConfigured}
-                  className="h-11 font-mono"
-                  required={!isConfigured}
-                />
-              </div>
-
-              <div className="space-y-2.5">
-                <Label htmlFor="secretAccessKey" className="text-sm font-semibold flex items-center gap-2">
-                  <Lock className="h-4 w-4 text-muted-foreground" />
-                  Secret Access Key
-                </Label>
-                <Input
-                  id="secretAccessKey"
-                  type="password"
-                  value={formData.secretAccessKey}
-                  onChange={(e) => setFormData(prev => ({ ...prev, secretAccessKey: e.target.value }))}
-                  placeholder={isConfigured ? '••••••••' : 'Enter secret access key'}
-                  disabled={isConfigured}
-                  className="h-11 font-mono"
-                  required={!isConfigured}
-                />
-              </div>
+            <div className="space-y-2.5">
+              <Label
+                htmlFor="accessKeyId"
+                className="text-sm font-semibold flex items-center gap-2"
+              >
+                <Lock className="h-4 w-4 text-muted-foreground" />
+                Access Key ID
+              </Label>
+              <Input
+                id="accessKeyId"
+                type="password"
+                value={formData.accessKeyId}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    accessKeyId: e.target.value,
+                  }))
+                }
+                placeholder={isConfigured ? '••••••••' : 'Enter access key ID'}
+                disabled={isConfigured}
+                className="h-11 font-mono"
+                required={!isConfigured}
+              />
             </div>
+
+            <div className="space-y-2.5">
+              <Label
+                htmlFor="secretAccessKey"
+                className="text-sm font-semibold flex items-center gap-2"
+              >
+                <Lock className="h-4 w-4 text-muted-foreground" />
+                Secret Access Key
+              </Label>
+              <Input
+                id="secretAccessKey"
+                type="password"
+                value={formData.secretAccessKey}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    secretAccessKey: e.target.value,
+                  }))
+                }
+                placeholder={
+                  isConfigured ? '••••••••' : 'Enter secret access key'
+                }
+                disabled={isConfigured}
+                className="h-11 font-mono"
+                required={!isConfigured}
+              />
+            </div>
+          </div>
 
           {/* Advanced Options */}
           <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/20 p-6 rounded-xl border border-indigo-200/50 dark:border-indigo-800/50">
-              <label className="flex items-start gap-4 cursor-pointer group">
-                <div className="flex items-center h-6">
-                  <input
-                    id="forcePathStyle"
-                    type="checkbox"
-                    checked={formData.forcePathStyle}
-                    onChange={(e) => setFormData(prev => ({ ...prev, forcePathStyle: e.target.checked }))}
-                    className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary focus:ring-2 focus:ring-offset-2 transition-all"
-                    disabled={isConfigured}
-                  />
+            <label className="flex items-start gap-4 cursor-pointer group">
+              <div className="flex items-center h-6">
+                <input
+                  id="forcePathStyle"
+                  type="checkbox"
+                  checked={formData.forcePathStyle}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      forcePathStyle: e.target.checked,
+                    }))
+                  }
+                  className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary focus:ring-2 focus:ring-offset-2 transition-all"
+                  disabled={isConfigured}
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="font-semibold text-sm group-hover:text-primary transition-colors">
+                  Use Path-Style URLs
                 </div>
-                <div className="flex-1 space-y-1">
-                  <div className="font-semibold text-sm group-hover:text-primary transition-colors">
-                    Use Path-Style URLs
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Required for MinIO and some S3 providers that use path-style addressing
-                  </p>
-                </div>
-              </label>
-            </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Required for MinIO and some S3 providers that use path-style
+                  addressing
+                </p>
+              </div>
+            </label>
+          </div>
 
           {/* Submit Button */}
           {!isConfigured && (
@@ -524,7 +596,9 @@ export function HubSettingsForm({
                   <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-500" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg mb-1">Delete Storage Configuration?</h3>
+                  <h3 className="font-semibold text-lg mb-1">
+                    Delete Storage Configuration?
+                  </h3>
                   <p className="text-sm text-muted-foreground">
                     This action cannot be undone. This will permanently delete:
                   </p>
@@ -534,7 +608,9 @@ export function HubSettingsForm({
               <ul className="space-y-2 mb-6 ml-16 text-sm">
                 <li className="flex items-start gap-2">
                   <span className="text-red-600 dark:text-red-500">•</span>
-                  <span>All file metadata and upload records in the database</span>
+                  <span>
+                    All file metadata and upload records in the database
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-red-600 dark:text-red-500">•</span>
@@ -548,7 +624,8 @@ export function HubSettingsForm({
 
               <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 rounded-lg p-3 mb-6">
                 <p className="text-sm text-amber-800 dark:text-amber-300">
-                  <strong>Note:</strong> Files will remain in your storage bucket and must be manually deleted if needed.
+                  <strong>Note:</strong> Files will remain in your storage
+                  bucket and must be manually deleted if needed.
                 </p>
               </div>
 

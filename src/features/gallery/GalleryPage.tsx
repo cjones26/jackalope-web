@@ -423,6 +423,9 @@ export function GalleryPage({ folderId: currentFolderId }: GalleryPageProps) {
     queryClient.removeQueries({ queryKey: ['signed-url'] });
     queryClient.removeQueries({ queryKey: ['bulk-signed-urls'] });
 
+    // Invalidate hub members cache to update upload counts
+    queryClient.invalidateQueries({ queryKey: ['hub-members'] });
+
     // Refresh the custom data by re-fetching
     const refreshData = async () => {
       try {
